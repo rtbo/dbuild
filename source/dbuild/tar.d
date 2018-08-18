@@ -77,10 +77,9 @@ bool isSingleRootDir(in string archive, out string rootDir)
 /// Extract a tar file to a directory.
 void extractTo(in string archive, in string directory)
 {
-    import std.array : array;
-    import std.exception : assumeUnique, enforce;
+    import std.exception : enforce;
     import std.file : mkdir, mkdirRecurse, setAttributes;
-    import std.path : chainPath;
+    import std.path : buildPath;
     import std.stdio : File;
 
     mkdirRecurse(directory);
@@ -117,11 +116,11 @@ void extractTo(in string archive, in string directory)
         
         // TODO mode
         if (th.typeFlag == TypeFlag.directory) {
-            const path = assumeUnique(chainPath(directory, filename).array);
+            const path = buildPath(directory, filename);
             mkdir(path);
         }
         else if (th.typeFlag == TypeFlag.file) {
-            const path = assumeUnique(chainPath(directory, filename).array);
+            const path = buildPath(directory, filename);
 
             {
                 auto nf = File(path, "wb");

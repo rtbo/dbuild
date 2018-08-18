@@ -34,15 +34,6 @@ if (isDigest!D && (is(V == enum) || isIntegral!V))
     digest.put(0);
 }
 
-string makePath(S...)(S comps)
-{
-    import std.array : array;
-    import std.exception : assumeUnique;
-    import std.path : chainPath;
-
-    return assumeUnique(chainPath(comps).array);
-}
-
 /**
    Obtain a lock for a file at the given path. If the file cannot be locked
    within the given duration, an exception is thrown.  The file will be created
@@ -88,16 +79,16 @@ auto lockFile(string path, Duration timeout=dur!"msecs"(500))
     }
 }
 
-void runCommand(string command, string workDir = null, bool quiet = false, string[string] env = null)
+void runCommand(string[] command, string workDir = null, bool quiet = false, string[string] env = null)
 {
     runCommands((&command)[0 .. 1], workDir, quiet, env);
 }
 
-void runCommands(in string[] commands, string workDir = null, bool quiet = false, string[string] env = null)
+void runCommands(in string[][] commands, string workDir = null, bool quiet = false, string[string] env = null)
 {
     import std.conv : to;
     import std.exception : enforce;
-    import std.process : Config, Pid, spawnShell, wait;
+    import std.process : Config, escapeShellCommand, Pid, spawnProcess, wait;
     import std.stdio : stdin, stdout, stderr, File;
 
     version(Windows) enum nullFile = "NUL";
@@ -116,9 +107,63 @@ void runCommands(in string[] commands, string workDir = null, bool quiet = false
         if (!quiet) {
             stdout.writeln("running ", cmd);
         }
-        auto pid = spawnShell(cmd, stdin, childStdout, childStderr, env, config, workDir);
+        auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
         auto exitcode = pid.wait();
         enforce(exitcode == 0, "Command failed with exit code "
-            ~ to!string(exitcode) ~ ": " ~ cmd);
+            ~ to!string(exitcode) ~ ": " ~ escapeShellCommand(cmd));
     }
+}
+
+/// environment variable path separator
+version(Posix) enum envPathSep = ':';
+else version(Windows) enum envPathSep = ';';
+else static assert(false);
+
+/// Search for filename in the envPath variable content which can
+/// contain multiple paths separated with sep depending on platform.
+/// Returns: null if the file can't be found.
+string searchInEnvPath(in string envPath, in string filename, in char sep=envPathSep)
+{
+    import std.algorithm : splitter;
+    import std.file : exists;
+    import std.path : buildPath;
+
+    foreach (dir; splitter(envPath, sep)) {
+        const filePath = buildPath(dir, filename);
+        if (exists(filePath)) return filePath;
+    }
+    return null;
+}
+
+string searchExecutable(in string exe)
+{
+    import std.process : environment;
+    version(Windows) {
+        import std.algorithm : endsWith;
+        const efn = exe.endsWith(".exe") ? exe : exe ~ ".exe";
+    }
+    else {
+        const efn = exe;
+    }
+
+    return searchInEnvPath(environment["PATH"], efn);
+}
+
+/// return the path of a file in a temp dir location
+/// with a unique name. fnFmt should be a file name (without directory)
+/// containing "%s" for use with std.format. It is used to insert a unique
+/// random string in the path.
+string tempFilePath(string fnFmt)
+{
+    import std.ascii : letters;
+    import std.conv : to;
+    import std.file : tempDir;
+    import std.format : format;
+    import std.path : buildPath;
+    import std.random : randomSample;
+    import std.utf : byCodeUnit;
+
+    // random id with 20 letters
+    const id = letters.byCodeUnit.randomSample(20).to!string;
+    return tempDir.buildPath(format(fnFmt, id));
 }

@@ -1,5 +1,7 @@
 module dbuild.build;
 
+import dbuild.buildsystem : BuildSystem;
+
 struct SrcFetch
 {
     static SrcFetch fromUrl(string url)
@@ -25,6 +27,23 @@ struct SrcFetch
     private string _commitRef;
     private string _md5;
 }
+
+enum BuildType
+{
+    /// release build
+    rel,
+    /// debug build
+    deb,
+}
+
+/// directories used during a build
+struct BuildDirs
+{
+    string src;
+    string build;
+    string install;
+}
+
 
 struct Build
 {
@@ -63,40 +82,33 @@ struct Build
         return this;
     }
 
-    Build cmake(string[] options=null)
+    Build debug_()
     {
-        _bsType = BuildSystemType.cmake;
-        _bsOptions = options;
-        _install = true;
-        return this;
-    }
-
-    Build autotools(string[] options=null)
-    {
-        _bsType = BuildSystemType.autotools;
-        _bsOptions = options;
+        _type = BuildType.deb;
         return this;
     }
 
     Build release()
     {
-        _type = Type.rel;
+        _type = BuildType.rel;
         return this;
     }
 
-    Build debug_()
+    Build type(in BuildType type)
     {
-        _type = Type.deb;
+        _type = type;
         return this;
     }
 
-    Build install (string prefix=null)
+    /// Set the install directory.
+    /// If not called, it will be set automatically within the work dir
+    Build install (string prefix)
     {
-        _install = true;
         _installPrefix = prefix;
         return this;
     }
 
+    /// Do not log and shut down external commands output.
     Build quiet ()
     {
         _quiet = true;
@@ -104,45 +116,59 @@ struct Build
     }
 
     /// Perform the build
-    BuildResult build()
+    /// Throws if build fails
+    /// Returns: the directories involved in the build
+    BuildDirs build(BuildSystem buildSystem)
     {
+        import dbuild.buildsystem : BuildContext;
         import dbuild.util : lockFile;
+        import std.exception : enforce;
+        import std.file : mkdirRecurse;
 
-        BuildResult res;
-
+        checkPrerequisites();
         ensureWorkDir();
         ensureSrcDir();
 
-        const buildId = computeBuildId();
+        const buildId = computeBuildId(buildSystem);
         auto lock = lockFile(bldLockPath(buildId));
         const buildDir = bldPath(buildId);
+        mkdirRecurse(buildDir);
+        if (!_installPrefix.length) {
+            _installPrefix = installPath(buildId);
+        }
 
+        BuildDirs dirs;
+        dirs.src = _srcDir;
+        dirs.build = buildDir;
+        dirs.install = _installPrefix;
 
-        return res;
-    }
+        buildSystem.issueCmds(BuildContext(dirs, _type, _quiet));
 
-    private enum Type
-    {
-        rel, deb,
+        return dirs;
     }
 
     private string _dubSubDir;
     private string _workDir;
     private SrcFetch _srcFetch;
     private string _srcDir;
-    private BuildSystemType _bsType;
-    private string[] _bsOptions;
-    private Type _type;
-    private bool _install;
+    private BuildType _type;
     private string _installPrefix;
     private bool _quiet;
 
+    private void checkPrerequisites() 
+    {
+        import dbuild.util : searchExecutable;
+        import std.exception : enforce;
+
+        enforce(_srcDir.length || !isGitUrl(_srcFetch._url) || searchExecutable("git"), 
+                "could not find git!");
+    }
+
     private void ensureWorkDir()
     {
-        import std.array : array;
         import std.exception : enforce;
         import std.file : mkdirRecurse;
-        import std.path : chainPath;
+        import std.path : buildPath;
         import std.process : environment;
 
         if (!_workDir.length) {
@@ -151,7 +177,7 @@ struct Build
 
             enforce (_dubSubDir.length, "either workDir or dubWorkDir must be used");
 
-            _workDir = chainPath(dubPkgDir, ".dub", _dubSubDir).array;
+            _workDir = buildPath(dubPkgDir, ".dub", _dubSubDir);
         }
 
         mkdirRecurse(_workDir);
@@ -173,7 +199,7 @@ struct Build
                 url.startsWith("https://") || url.startsWith("http://") || url.startsWith("ftp://")
             );
 
-            const isGit = url.endsWith(".git") || url.startsWith("git://");
+            const isGit = isGitUrl(url);
 
             enforce(isArchiveDownload || isGit, "only zip, tar, tar.gz archives or git repo " ~
                                                 "are supported for source fetch");
@@ -191,40 +217,53 @@ struct Build
         }
     }
 
-    @property string srcLockPath()
+    private @property string srcLockPath()
     {
-        import dbuild.util : makePath;
+        import std.path : buildPath;
 
-        return makePath(_workDir, ".srcLock");
+        return buildPath(_workDir, ".srcLock");
     }
 
-    @property string bldLockPath(in string buildId)
+    private string bldLockPath(in string buildId)
     {
-        import dbuild.util : makePath;
+        import std.path : buildPath;
 
-        return makePath(_workDir, ".bldLock-"~buildId);
+        return buildPath(_workDir, ".bldLock-"~buildId);
     }
 
-    @property string bldPath(in string buildId)
+    private string bldPath(in string buildId)
     {
-        import dbuild.util : makePath;
+        import std.path : buildPath;
 
-        return makePath(_workDir, "build-"~buildId);
+        return buildPath(_workDir, "build-"~buildId);
+    }
+
+    private string installPath(in string buildId)
+    {
+        import std.path : buildPath;
+
+        return buildPath(_workDir, "install-"~buildId);
+    }
+
+    private bool isGitUrl(in string url)
+    {
+        import std.algorithm : startsWith, endsWith;
+
+        return url.endsWith(".git") || url.startsWith("git://");
     }
 
     private string ensureArchive(in string url)
     {
-        import std.array : array;
-        import std.exception : assumeUnique, enforce;
+        import std.exception : enforce;
         import std.file : exists;
         import std.net.curl : download;
-        import std.path : chainPath;
+        import std.path : buildPath;
         import std.uri : decode;
         import std.stdio : writefln;
 
         const decoded = decode(url);
         const fn = urlLastComp(decoded);
-        const archive = assumeUnique(chainPath(_workDir, fn).array);
+        const archive = buildPath(_workDir, fn);
 
         const md5 = _srcFetch._md5;
 
@@ -288,20 +327,19 @@ struct Build
     private string extractTar(in string archive)
     {
         import dbuild.tar : extractTo, isSingleRootDir;
-        import std.array : array;
-        import std.exception : assumeUnique, enforce;
+        import std.exception : enforce;
         import std.file : exists, isDir;
-        import std.path : chainPath;
+        import std.path : buildPath;
 
         string extractDir;
         string srcDir;
         string rootDir;
         if (isSingleRootDir(archive, rootDir)) {
             extractDir = _workDir;
-            srcDir = assumeUnique(chainPath(_workDir, rootDir).array);
+            srcDir = buildPath(_workDir, rootDir);
         }
         else {
-            extractDir = assumeUnique(chainPath(_workDir, "src").array);
+            extractDir = buildPath(_workDir, "src");
             srcDir = extractDir;
         }
 
@@ -323,10 +361,9 @@ struct Build
     {
         import dbuild.util : runCommand;
         import std.algorithm : endsWith;
-        import std.array : array;
-        import std.exception : assumeUnique, enforce;
+        import std.exception : enforce;
         import std.file : exists, isDir;
-        import std.path : chainPath;
+        import std.path : buildPath;
         import std.process : pipeProcess, Redirect;
         import std.uri : decode;
 
@@ -338,20 +375,20 @@ struct Build
             dirName = dirName[0 .. $-4];
         }
 
-        const srcDir = assumeUnique(chainPath(_workDir, dirName).array);
+        const srcDir = buildPath(_workDir, dirName);
 
         if (!exists(srcDir)) {
-            runCommand("git clone "~url~" "~dirName, _workDir, _quiet);
+            runCommand(["git", "clone", url, dirName], _workDir, _quiet);
         }
 
         enforce(isDir(srcDir));
 
-        runCommand("git checkout "~commitRef, srcDir, _quiet);
+        runCommand(["git", "checkout", commitRef], srcDir, _quiet);
 
         return srcDir;
     }
 
-    string computeBuildId() 
+    string computeBuildId(BuildSystem bs) 
     {
         import dbuild.util : feedDigestData;
         import std.digest : toHexString, LetterCase;
@@ -361,26 +398,12 @@ struct Build
         feedDigestData(md5, _srcFetch._url);
         feedDigestData(md5, _srcFetch._commitRef);
         feedDigestData(md5, _type);
-        feedDigestData(md5, _bsType);
-        feedDigestData(md5, _bsOptions);
-        feedDigestData(md5, cast(ubyte)_install);
         feedDigestData(md5, _installPrefix);
+        bs.feedBuildId(md5);
 
         const hash = md5.finish();
-        return toHexString!(LetterCase.lower)(hash).idup;
+        return toHexString!(LetterCase.lower)(hash)[0 .. 7].idup;
     }
-}
-
-struct BuildResult
-{
-    bool success;
-    string buildDir;
-    string installDir;
-}
-
-private enum BuildSystemType
-{
-    unset, cmake, autotools
 }
 
 private enum ArchiveFormat
@@ -426,32 +449,3 @@ in(md5.length)
     auto f = File(path, "rb");
     return md5Of(f.byChunk(buf[])).toHexString!(LetterCase.lower)() == md5.toLower();
 }
-
-// private struct Builder
-// {
-//     private enum Type { rel, deb }
-//     private Type _type;
-//     private BuildSystem _buildSystem;
-//     private SrcFetch _srcFetch;
-//     private Toolchain _toolchain;
-//     private string _dirFmt;
-
-//     private string computeBuildId() 
-//     {
-//         import dbuild.util : addHash;
-//         import std.digest : toHexString;
-//         import std.digest.md : MD5;
-//         import std.format : format;
-
-//         MD5 md5;
-
-//         addHash(md5, _type);
-//         _buildSystem.feedHash(md5);
-//         _srcFetch.feedHash(md5);
-//         _toolchain.feedHash(md5);
-        
-//         const hash = md5.finish();
-//         return format(_dirFmt, toHexString(hash[]));
-//     }
-
-// }
