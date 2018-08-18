@@ -105,7 +105,7 @@ void runCommands(in string[][] commands, string workDir = null, bool quiet = fal
 
     foreach(cmd; commands){
         if (!quiet) {
-            stdout.writeln("running ", cmd);
+            stdout.writeln("running ", escapeShellCommand(cmd));
         }
         auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
         auto exitcode = pid.wait();
