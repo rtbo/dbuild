@@ -4,21 +4,21 @@ module dbuild.target;
 /// A target to be checked for, to possibly bypass the build
 abstract class Target
 {
-    /// target artifact
-    string target;
+    /// target name
+    string name;
     /// files used to build the artifacts in the src dir
     string[] srcFiles;
     /// full path to the target artifact
-    string targetPath;
+    string artifact;
 
-    private this(string target, string[] srcFiles)
+    private this(string name, string[] srcFiles)
     {
-        this.target = target;
+        this.name = name;
         this.srcFiles = srcFiles;
     }
 
     /// resolve the target file in the install dir, and set the targetPath field
-    abstract void resolveTargetPath(in string installDir);
+    abstract void resolveArtifact(in string installDir);
 
     /// Check if the target is up-to-date vs the provided src files.
     /// Returns: true if the target is up-to-date, false if it needs rebuild
@@ -27,82 +27,74 @@ abstract class Target
         import std.algorithm : map;
         import std.exception : enforce;
         import std.file : exists, isFile, timeLastModified;
+        import std.path : buildPath;
 
-        if (!targetPath.length) return false;
+        if (!artifact.length) return false;
 
-        if (!exists(targetPath) || !isFile(targetPath)) {
+        if (!exists(artifact) || !isFile(artifact)) {
             return false;
         }
 
-        const targetTime = timeLastModified(targetPath);
+        const artifactTime = timeLastModified(artifact);
 
-        foreach (sf; srcFiles.map!(f => dirs.src(f))) {
+        foreach (sf; srcFiles.map!(f => srcDir.buildPath(f))) {
             enforce(exists(sf) && isFile(sf), sf~": No such file!");
 
-            if (timeLastModified(sf) > targetTime) {
+            if (timeLastModified(sf) > artifactTime) {
                 return false;
             }
         }
+
+        return true;
     }
 }
 
-Target fileTarget(string target, string[] srcFiles=null)
+Target fileTarget(string name, string[] srcFiles=null)
 {
-    return new FileTarget(target, srcFiles);
+    return new FileTarget(name, srcFiles);
 }
 
-Target libTarget(string target, string[] srcFiles=null)
+Target libTarget(string name, string[] srcFiles=null)
 {
-    return new LibTarget(target, srcFiles);
+    return new LibTarget(name, srcFiles);
 }
 
 private:
 
 class FileTarget : Target
 {
-    this(string target, string[] srcFiles)
+    this(string name, string[] srcFiles)
     {
-        super(target, srcFiles);
+        super(name, srcFiles);
     }
 
-    override void resolveTargetPath(in string installDir)
+    override void resolveArtifact(in string installDir)
     {
         import std.path : buildPath;
 
-        targetPath = buildPath(installDir, target);
+        artifact = buildPath(installDir, name);
     }
 }
 
 class LibTarget : Target
 {
-    this (string target, string[] srcFiles)
+    this (string name, string[] srcFiles)
     {
-        super(target, srcFiles);
+        super(name, srcFiles);
     }
 
-    override void resolveTargetPath(in string installDir)
+    override void resolveArtifact(in string installDir)
     {
         // looking for a file that can be a library of name "target"
         // e.g. libtarget.a, libtarget.so, target.lib, etc.
+        import std.algorithm : any, canFind;
         import std.file : exists, isFile;
         import std.path : buildPath;
 
-        const libtargeta = "lib"~target~".a";
-        version(Posix) {
-            const libtargetso = "lib"~target~".so";
-        }
-        else version(Windows) {
-            const targetlib = target~".lib";
-            const targetdll = target~".dll";
-        }
-        else {
-            static assert(false);
-        }
-
-        bool testFile(in string dir, in string name) {
-            const path = buildPath(dir, name);
+        bool testFile(in string dir, in string fn) {
+            const path = buildPath(dir, fn);
             if (exists(path) && isFile(path)) {
-                targetPath = path;
+                artifact = path;
                 return true;
             }
             else {
@@ -110,21 +102,58 @@ class LibTarget : Target
             }
         }
 
+        // the directories to search in
+        const searchDirs = [
+            installDir,
+            buildPath(installDir, "lib"),
+            buildPath(installDir, "lib64")
+        ];
+
+        // if name already has an extension (may be with version behind)
+        // we try to look only for exact filename in a few directories
+        string[] exts = [".a"];
+        version(Posix) {
+            exts ~= [".so"];
+        }
+        else version(Windows) {
+            exts ~= [".lib", ".dll"];
+        }
+        else {
+            static assert(false);
+        }
+
+        if (exts.any!(e => name.canFind(e))) {
+            foreach (sd; searchDirs) {
+                if (testFile(sd, name)) break;
+            }
+            return;
+        }
+
+        // testing now for standard names
+        const libnamea = "lib"~name~".a";
+        version(Posix) {
+            const libnameso = "lib"~name~".so";
+        }
+        else version(Windows) {
+            const namelib = name~".lib";
+            const namedll = name~".dll";
+        }
+
         bool searchDir(in string dir) {
             if (!exists(dir)) return false;
-            if (testFile(dir, libtargeta)) return true;
+            if (testFile(dir, libnamea)) return true;
             version(Posix) {
-                if (testFile(dir, libtargetso)) return true;
+                if (testFile(dir, libnameso)) return true;
             }
             else {
-                if (testFile(dir, targetlib)) return true;
-                if (testFile(dir, targetdll)) return true;
+                if (testFile(dir, namelib)) return true;
+                if (testFile(dir, namedll)) return true;
             }
             return false;
         }
 
-        if (searchDir(installDir)) return true;
-        if (searchDir(buildPath(installDir, "lib"))) return true;
-        if (searchDir(buildPath(installDir, "lib64"))) return true;
+        foreach (sd; searchDirs) {
+            if (searchDir(sd)) break;
+        }
     }
 }

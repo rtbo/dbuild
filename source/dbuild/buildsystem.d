@@ -98,7 +98,7 @@ struct CMake
     }
 
     /// get the result BuildSystem
-    BuildSystem get()
+    BuildSystem buildSystem()
     {
         import std.exception : enforce;
 

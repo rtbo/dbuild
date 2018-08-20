@@ -81,6 +81,15 @@ struct BuildResult
 {
     BuildDirs dirs;
     Target[string] targets;
+
+    string artifact(in string name)
+    {
+        auto target = targets[name];
+        if (!target.artifact) {
+            target.resolveArtifact(dirs.installDir);
+        }
+        return target.artifact;
+    }
 }
 
 struct Build
@@ -157,14 +166,14 @@ struct Build
     /// and to help resolving to a result artifact
     Build target(Target target)
     {
-        _targets[target.target] = target;
+        _targets[target.name] = target;
         return this;
     }
 
     /// Perform the build
     /// Throws if build fails
     /// Returns: the directories involved in the build
-    BuildDirs build(BuildSystem buildSystem)
+    BuildResult build(BuildSystem buildSystem)
     {
         import dbuild.buildsystem : BuildContext;
         import dbuild.util : lockFile;
@@ -254,7 +263,7 @@ struct Build
                                                 "are supported for source fetch");
 
             if (isArchiveDownload) {
-                const archive = ensureArchive(url);
+                const archive = downloadArchive(url);
                 _srcDir = extractArchive(archive);
             }
             else if (isGit) {
@@ -301,7 +310,7 @@ struct Build
         return url.endsWith(".git") || url.startsWith("git://");
     }
 
-    private string ensureArchive(in string url)
+    private string downloadArchive(in string url)
     {
         import std.exception : enforce;
         import std.file : exists;
@@ -321,7 +330,7 @@ struct Build
                 import std.file : remove;
                 remove(archive);
             }
-            writefln("downloading %s", url);
+            if (!_quiet) writefln("downloading %s", url);
             download(url, archive);
 
             enforce(!md5.length || checkMd5(archive, md5), "wrong md5 sum for "~archive);
@@ -355,8 +364,10 @@ struct Build
         import std.algorithm : map;
         import std.exception : enforce;
         import std.file : exists, remove;
-        import std.stdio : File;
+        import std.stdio : File, writefln;
         import std.zlib : UnCompress;
+
+        if (!_quiet) writefln("extracting %s", archive);
 
         const tarFn = archive[0 .. $-3];
         enforce(!exists(tarFn), tarFn~" already exists");
@@ -379,6 +390,9 @@ struct Build
         import std.exception : enforce;
         import std.file : exists, isDir;
         import std.path : buildPath;
+        import std.stdio : writefln;
+
+        if (!_quiet) writefln("extracting %s", archive);
 
         string extractDir;
         string srcDir;
@@ -403,6 +417,9 @@ struct Build
 
     private string extractZip(in string archive)
     {
+        import std.stdio : writefln;
+
+        if (!_quiet) writefln("extracting %s", archive);
         assert(false, "unimplemented");
     }
 
@@ -437,7 +454,7 @@ struct Build
         return srcDir;
     }
 
-    string computeBuildId(BuildSystem bs)
+    private string computeBuildId(BuildSystem bs)
     {
         import dbuild.util : feedDigestData;
         import std.digest : toHexString, LetterCase;
@@ -457,7 +474,7 @@ struct Build
     private bool checkTargets(BuildDirs dirs)
     {
         foreach (t; _targets) {
-            t.resolveTargetPath(dirs.installDir);
+            t.resolveArtifact(dirs.installDir);
             if (!t.check(dirs.srcDir)) return false;
         }
         return true;
