@@ -1,6 +1,7 @@
 module dbuild.build;
 
 import dbuild.buildsystem : BuildSystem;
+import dbuild.target : Target;
 
 struct SrcFetch
 {
@@ -36,14 +37,51 @@ enum BuildType
     deb,
 }
 
-/// directories used during a build
+/// directories involved during a build
 struct BuildDirs
 {
-    string src;
-    string build;
-    string install;
+    /// the source directory
+    string srcDir;
+    /// the build directory
+    string buildDir;
+    /// the install directory
+    string installDir;
+
+    /// build a path within the source directory
+    /// Examples:
+    /// -----------
+    /// BuildDirs dirs;
+    /// const mainFile = dirs.src("src", "main.c"); // get [src-dir]/src/main.c
+    /// -----------
+    string src(Comps...)(Comps comps) const
+    {
+        import std.path : buildPath;
+
+        return buildPath(srcDir, comps);
+    }
+
+    /// build a path within the build directory
+    string build(Comps...)(Comps comps) const
+    {
+        import std.path : buildPath;
+
+        return buildPath(buildDir, comps);
+    }
+
+    /// build a path within the install directory
+    string install(Comps...)(Comps comps) const
+    {
+        import std.path : buildPath;
+
+        return buildPath(installDir, comps);
+    }
 }
 
+struct BuildResult
+{
+    BuildDirs dirs;
+    Target[string] targets;
+}
 
 struct Build
 {
@@ -115,6 +153,14 @@ struct Build
         return this;
     }
 
+    /// Add a target to be checked before attempting to start the build
+    /// and to help resolving to a result artifact
+    Build target(Target target)
+    {
+        _targets[target.target] = target;
+        return this;
+    }
+
     /// Perform the build
     /// Throws if build fails
     /// Returns: the directories involved in the build
@@ -130,7 +176,6 @@ struct Build
         ensureSrcDir();
 
         const buildId = computeBuildId(buildSystem);
-        auto lock = lockFile(bldLockPath(buildId));
         const buildDir = bldPath(buildId);
         mkdirRecurse(buildDir);
         if (!_installPrefix.length) {
@@ -138,13 +183,16 @@ struct Build
         }
 
         BuildDirs dirs;
-        dirs.src = _srcDir;
-        dirs.build = buildDir;
-        dirs.install = _installPrefix;
+        dirs.srcDir = _srcDir;
+        dirs.buildDir = buildDir;
+        dirs.installDir = _installPrefix;
 
-        buildSystem.issueCmds(BuildContext(dirs, _type, _quiet));
+        if (!checkTargets(dirs)) {
+            auto lock = lockFile(bldLockPath(buildId));
+            buildSystem.issueCmds(BuildContext(dirs, _type, _quiet));
+        }
 
-        return dirs;
+        return BuildResult(dirs, _targets);
     }
 
     private string _dubSubDir;
@@ -154,13 +202,14 @@ struct Build
     private BuildType _type;
     private string _installPrefix;
     private bool _quiet;
+    private Target[string] _targets;
 
-    private void checkPrerequisites() 
+    private void checkPrerequisites()
     {
         import dbuild.util : searchExecutable;
         import std.exception : enforce;
 
-        enforce(_srcDir.length || !isGitUrl(_srcFetch._url) || searchExecutable("git"), 
+        enforce(_srcDir.length || !isGitUrl(_srcFetch._url) || searchExecutable("git"),
                 "could not find git!");
     }
 
@@ -194,7 +243,7 @@ struct Build
             auto lock = lockFile(srcLockPath);
 
             const url = _srcFetch._url;
-            
+
             const isArchiveDownload = isSupportedArchiveExt(url) && (
                 url.startsWith("https://") || url.startsWith("http://") || url.startsWith("ftp://")
             );
@@ -203,7 +252,7 @@ struct Build
 
             enforce(isArchiveDownload || isGit, "only zip, tar, tar.gz archives or git repo " ~
                                                 "are supported for source fetch");
-            
+
             if (isArchiveDownload) {
                 const archive = ensureArchive(url);
                 _srcDir = extractArchive(archive);
@@ -288,14 +337,14 @@ struct Build
         final switch(archiveFormat(archive)) {
         case ArchiveFormat.targz:
             const tarF = extractTarGz(archive);
-            const res = extractTar(tarF); 
+            const res = extractTar(tarF);
             remove(tarF);
             return res;
         case ArchiveFormat.tar:
             return extractTar(archive);
         case ArchiveFormat.zip:
             return extractZip(archive);
-        }    
+        }
     }
 
     /// extract .tar.gz to .tar, returns the .tar file path
@@ -316,7 +365,7 @@ struct Build
         auto outF = File(tarFn, "wb");
 
         UnCompress decmp = new UnCompress;
-        foreach (chunk; inF.byChunk(4096).map!(x => decmp.uncompress(x))) 
+        foreach (chunk; inF.byChunk(4096).map!(x => decmp.uncompress(x)))
         {
             outF.rawWrite(chunk);
         }
@@ -388,7 +437,7 @@ struct Build
         return srcDir;
     }
 
-    string computeBuildId(BuildSystem bs) 
+    string computeBuildId(BuildSystem bs)
     {
         import dbuild.util : feedDigestData;
         import std.digest : toHexString, LetterCase;
@@ -403,6 +452,15 @@ struct Build
 
         const hash = md5.finish();
         return toHexString!(LetterCase.lower)(hash)[0 .. 7].idup;
+    }
+
+    private bool checkTargets(BuildDirs dirs)
+    {
+        foreach (t; _targets) {
+            t.resolveTargetPath(dirs.installDir);
+            if (!t.check(dirs.srcDir)) return false;
+        }
+        return true;
     }
 }
 
@@ -438,8 +496,8 @@ private string urlLastComp(in string url)
 }
 
 private bool checkMd5(in string path, in string md5)
-in(md5.length)
-{
+in { assert(md5.length); }
+body {
     import std.digest : LetterCase, toHexString;
     import std.digest.md : md5Of;
     import std.uni : toLower;

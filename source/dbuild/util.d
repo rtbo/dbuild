@@ -17,7 +17,7 @@ void feedDigestData(D)(ref D digest, in string[] ss)
 if (isDigest!D)
 {
     import std.bitmanip : nativeToLittleEndian;
-    
+
     digest.put(nativeToLittleEndian(cast(uint)ss.length));
     foreach (s; ss) {
         digest.put(cast(ubyte[])s);
@@ -105,13 +105,20 @@ void runCommands(in string[][] commands, string workDir = null, bool quiet = fal
 
     foreach(cmd; commands){
         if (!quiet) {
-            stdout.writeln("running ", escapeShellCommand(cmd));
+            stdout.writeln("running ", cmd.commandRep);
         }
         auto pid = spawnProcess(cmd, stdin, childStdout, childStderr, env, config, workDir);
         auto exitcode = pid.wait();
         enforce(exitcode == 0, "Command failed with exit code "
-            ~ to!string(exitcode) ~ ": " ~ escapeShellCommand(cmd));
+            ~ to!string(exitcode) ~ ": " ~ cmd.commandRep);
     }
+}
+
+private @property string commandRep(in string[] cmd)
+{
+    import std.array : join;
+
+    return cmd.join(" ");
 }
 
 /// environment variable path separator

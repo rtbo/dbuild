@@ -66,10 +66,12 @@ struct CMake
 
     private string findDefaultGenerator()
     {
-        import dbuild.msvc : dubArchOptions;
         import dbuild.util : searchExecutable;
 
-        version(Windows) {
+        version(Windows)
+        {
+            import dbuild.msvc : dubArchOptions;
+
             if (tryMsvcSetup(0, dubArchOptions())) {
                 return "NMake Makefiles";
             }
@@ -96,7 +98,7 @@ struct CMake
     }
 
     /// get the result BuildSystem
-    BuildSystem get() 
+    BuildSystem get()
     {
         import std.exception : enforce;
 
@@ -146,11 +148,11 @@ private class CMakeBuildSystem : BuildSystem
 
         const string[] configCmd = [
             "cmake",
-            "-G", generator, 
-            "-DCMAKE_BUILD_TYPE="~buildType, 
-            "-DCMAKE_INSTALL_PREFIX="~ctx.dirs.install
+            "-G", generator,
+            "-DCMAKE_BUILD_TYPE="~buildType,
+            "-DCMAKE_INSTALL_PREFIX="~ctx.dirs.installDir
         ] ~ options ~ [
-            ctx.dirs.src
+            ctx.dirs.srcDir
         ];
         const string[] buildCmd = [
             "cmake", "--build", "."
@@ -160,7 +162,7 @@ private class CMakeBuildSystem : BuildSystem
         ];
 
         runCommands(
-            [ configCmd, buildCmd, installCmd ], ctx.dirs.build, ctx.quiet, env
+            [ configCmd, buildCmd, installCmd ], ctx.dirs.buildDir, ctx.quiet, env
         );
     }
 }
