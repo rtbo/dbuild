@@ -46,7 +46,7 @@ string[] dubArchOptions()
 /// Compute the environment set by the passed vcvarsBat, with options.
 /// This function actually execute the script and dump the environment to
 /// the result AA.
-/// Returns: The environment AA, containing the current environment, and 
+/// Returns: The environment AA, containing the current environment, and
 /// the variables set by vcvarsall. (Path for example will also contain the current dirs)
 string[string] msvcEnvironment(in string vcvarsBat, in string[] options)
 {
@@ -77,7 +77,7 @@ string[string] msvcEnvironment(in string vcvarsBat, in string[] options)
 
     scope(exit) remove(scriptPath);
 
-    string[string] env; 
+    string[string] env;
 
     auto p = pipe();
     auto childIn = stdin;
@@ -116,7 +116,7 @@ private @property string programFilesDir()
 
     version(Win64) {
         string var = "ProgramFiles(x86)";
-    } 
+    }
     else {
         string var = "ProgramFiles";
     }
@@ -127,11 +127,11 @@ private bool detectBuildTools2017(out MsvcInstall install)
 {
     import std.file : exists;
     import std.path : buildPath;
-    
+
     const pfd = programFilesDir;
     install.vcvarsBat = buildPath(pfd, "Microsoft Visual Studio", "2017", "BuildTools",
             "VC", "Auxiliary", "Build", "vcvarsall.bat");
-    
+
     if (exists(install.vcvarsBat)) {
         install.ver = [15, 0];
         return true;
