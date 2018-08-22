@@ -1,7 +1,5 @@
 module dbuild.util;
 
-package:
-
 import std.digest : isDigest;
 import std.traits : isIntegral;
 import core.time : dur, Duration;
