@@ -247,6 +247,7 @@ struct Build
 
     private bool checkTargets(BuildDirs dirs)
     {
+        if (!_targets.length) return false;
         foreach (t; _targets) {
             t.resolveArtifact(dirs.installDir);
             if (!t.check(dirs.srcDir)) return false;
