@@ -34,6 +34,19 @@ if (isDigest!D && (is(V == enum) || isIntegral!V))
     digest.put(0);
 }
 
+bool checkMd5(in string path, in string md5)
+in { assert(md5.length); }
+body {
+    import std.digest : LetterCase, toHexString;
+    import std.digest.md : md5Of;
+    import std.uni : toLower;
+    import std.stdio : File;
+
+    ubyte[1024] buf = void;
+    auto f = File(path, "rb");
+    return md5Of(f.byChunk(buf[])).toHexString!(LetterCase.lower)() == md5.toLower();
+}
+
 /**
    Obtain a lock for a file at the given path. If the file cannot be locked
    within the given duration, an exception is thrown.  The file will be created
