@@ -39,6 +39,9 @@ Source dubPkgSource(in string subdir)
 /// archive
 Source archiveFetchSource(in string url, in string md5=null)
 {
+    import std.exception : enforce;
+
+    enforce(isSupportedArchiveExt(url), url~" is not a supported archive type");
     return new ArchiveFetchSource(url, md5);
 }
 
@@ -219,7 +222,6 @@ private class ArchiveFetchSource : Source
         writefln("extracting %s", archive);
         assert(false, "unimplemented");
     }
-
 }
 
 private class GitSource : Source
@@ -282,11 +284,17 @@ private enum ArchiveFormat
     targz, tar, zip,
 }
 
+private immutable(string[]) supportedArchiveExts = [
+    ".zip", ".tar.gz", ".tar"
+];
+
 private bool isSupportedArchiveExt(in string path)
 {
     import std.algorithm : endsWith;
+    import std.uni : toLower;
 
-    return path.endsWith(".zip") || path.endsWith(".tar.gz") || path.endsWith(".tar");
+    const lpath = path.toLower;
+    return lpath.endsWith(".zip") || lpath.endsWith(".tar.gz") || lpath.endsWith(".tar");
 }
 
 private ArchiveFormat archiveFormat(in string path)
