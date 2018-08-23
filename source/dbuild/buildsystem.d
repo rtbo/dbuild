@@ -61,6 +61,8 @@ struct CMake
         }
         _env = msvcEnvironment(installs[0].vcvarsBat, vcvarsOptions);
         _additionalHashFeed = installs[0].vcvarsBat ~ vcvarsOptions;
+        _msvc = true;
+
         return true;
     }
 
@@ -73,24 +75,27 @@ struct CMake
             import dbuild.msvc : dubArchOptions;
 
             if (tryMsvcSetup(0, dubArchOptions())) {
-                return "NMake Makefiles";
+                if (hasNinja) {
+                    return "Ninja";
+                }
+                else {
+                    return "NMake Makefiles";
+                }
             }
         }
-        if (searchExecutable("ninja")) {
-            if (searchExecutable("gcc") || searchExecutable("clang")) {
-                return "Ninja";
-            }
+        if (hasNinja) {
+            return "Ninja";
         }
         version(Windows) {
-            if (searchExecutable("mingw32-make")) {
+            if (hasMingw32Make) {
                 return "MinGW Makefiles";
             }
-            else if (searchExecutable("make")) { // under cygwin?
+            else if (hasMake) { // under cygwin?
                 return "MSYS Makefiles";
             }
         }
         else {
-            if (searchExecutable("make")) {
+            if (hasMake) {
                 return "Unix Makefiles";
             }
         }
@@ -106,6 +111,13 @@ struct CMake
             _gen = enforce(findDefaultGenerator(), "Could not find suitable CMake generator");
         }
 
+        version(Windows) {
+            if (_gen == "Ninja" && _msvc) {
+                _env["CC"] = "cl";
+                _env["CXX"] = "cl";
+            }
+        }
+
         return new CMakeBuildSystem(_gen, _options, _env, _additionalHashFeed);
     }
 
@@ -113,6 +125,53 @@ struct CMake
     private string[] _options;
     private string[string] _env;
     private string[] _additionalHashFeed;
+    version(Windows) private bool _msvc;
+}
+
+
+private @property bool hasNinja()
+{
+    import dbuild.util : searchExecutable;
+    import std.concurrency : initOnce;
+
+    static __gshared bool has;
+    return initOnce!has(searchExecutable("ninja") !is null);
+}
+
+private @property bool hasGcc()
+{
+    import dbuild.util : searchExecutable;
+    import std.concurrency : initOnce;
+
+    static __gshared bool has;
+    return initOnce!has(searchExecutable("gcc") !is null);
+}
+
+private @property bool hasClang()
+{
+    import dbuild.util : searchExecutable;
+    import std.concurrency : initOnce;
+
+    static __gshared bool has;
+    return initOnce!has(searchExecutable("clang") !is null);
+}
+
+private @property bool hasMake()
+{
+    import dbuild.util : searchExecutable;
+    import std.concurrency : initOnce;
+
+    static __gshared bool has;
+    return initOnce!has(searchExecutable("make") !is null);
+}
+
+private @property bool hasMingw32Make()
+{
+    import dbuild.util : searchExecutable;
+    import std.concurrency : initOnce;
+
+    static __gshared bool has;
+    return initOnce!has(searchExecutable("mingw32-make") !is null);
 }
 
 
