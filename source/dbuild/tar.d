@@ -105,7 +105,7 @@ void extractTo(in string archive, in string directory)
 
         // Check the checksum
         if(!th.confirmChecksum()) {
-            throw new Exception("Invalid checksum for "~archive);
+            throw new Exception("Tar invalid checksum for "~archive);
         }
 
         string filename = trunc(th.filename);
@@ -113,7 +113,7 @@ void extractTo(in string archive, in string directory)
             filename = trunc(th.prefix) ~ filename;
         }
         auto sz = cast(size_t)octalStrToLong(th.size);
-        
+
         // TODO mode
         if (th.typeFlag == TypeFlag.directory) {
             const path = buildPath(directory, filename);
@@ -171,7 +171,7 @@ private struct TarHeader
     char[8] checksum;
     TypeFlag typeFlag;
     char[100] linkedFilename;
-    
+
     char[6] magic;
     char[2] tarVersion;
     char[32] owner;
@@ -180,12 +180,12 @@ private struct TarHeader
     char[8] deviceMinorNumber;
     char[155] prefix;
     char[12] padding;
-    
+
     bool confirmChecksum()
     {
         uint apparentChecksum = octalStrToInt(checksum);
         uint currentSum = calculateUnsignedChecksum();
-        
+
         if(apparentChecksum != currentSum)
         {
             // Handle old tars which use a broken implementation that calculated the
@@ -198,7 +198,7 @@ private struct TarHeader
         }
         return true;
     }
-    
+
     void nullify()
     {
         filename = 0;
@@ -218,7 +218,7 @@ private struct TarHeader
         prefix = 0;
         padding = 0;
     }
-    
+
     uint calculateUnsignedChecksum()
     {
         uint sum;
@@ -232,7 +232,7 @@ private struct TarHeader
         sum += typeFlag;
         sum += unsignedSum(linkedFilename);
         sum += unsignedSum(magic);
-        sum += unsignedSum(tarVersion); 
+        sum += unsignedSum(tarVersion);
         sum += unsignedSum(owner);
         sum += unsignedSum(group);
         sum += unsignedSum(deviceMajorNumber);
@@ -240,7 +240,7 @@ private struct TarHeader
         sum += unsignedSum(prefix);
         return sum;
     }
-    
+
     uint calculateSignedChecksum()
     {
         uint sum;
@@ -254,7 +254,7 @@ private struct TarHeader
         sum += typeFlag;
         sum += signedSum(linkedFilename);
         sum += signedSum(magic);
-        sum += signedSum(tarVersion); 
+        sum += signedSum(tarVersion);
         sum += signedSum(owner);
         sum += signedSum(group);
         sum += signedSum(deviceMajorNumber);
@@ -272,7 +272,7 @@ private struct TarHeader
         }
         return result;
     }
-    
+
     private static uint signedSum(char[] values)
     {
         uint result;
@@ -286,9 +286,9 @@ private struct TarHeader
 
 static assert (TarHeader.sizeof == blockSize);
 
-private string posixMagicNum = "ustar\0";  
+private string posixMagicNum = "ustar\0";
 
-private bool isNullBlock(const(ubyte)[] block) 
+private bool isNullBlock(const(ubyte)[] block)
 {
     if (block.length != blockSize) return false;
     foreach(b; block) {
@@ -328,7 +328,7 @@ private char[] strToBytes(string str, uint length)
     result[str.length .. $] = 0;
     return result;
 }
-    
+
 private string trunc(char[] input)
 {
     for(size_t i=0; i < input.length; ++i)
