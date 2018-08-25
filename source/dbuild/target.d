@@ -89,10 +89,10 @@ class LibTarget : Target
         // e.g. libtarget.a, libtarget.so, target.lib, etc.
         import std.algorithm : any, canFind;
         import std.file : exists, isFile;
+        import std.range : only;
         import std.path : buildPath;
 
-        bool testFile(in string dir, in string fn) {
-            const path = buildPath(dir, fn);
+        bool testFile(in string path) {
             if (exists(path) && isFile(path)) {
                 artifact = path;
                 return true;
@@ -102,12 +102,10 @@ class LibTarget : Target
             }
         }
 
-        // the directories to search in
-        const searchDirs = [
-            installDir,
-            buildPath(installDir, "lib"),
-            buildPath(installDir, "lib64")
-        ];
+        // the directories and file extensions to look for
+        const libDir = buildPath(installDir, "lib");
+        const lib64Dir = buildPath(installDir, "lib64");
+        const binDir = buildPath(installDir, "bin");
 
         // if name already has an extension (may be with version behind)
         // we try to look only for exact filename in a few directories
@@ -123,37 +121,34 @@ class LibTarget : Target
         }
 
         if (exts.any!(e => name.canFind(e))) {
-            foreach (sd; searchDirs) {
-                if (testFile(sd, name)) break;
+            foreach (sd; only(installDir, libDir, lib64Dir, binDir)) {
+                if (testFile(buildPath(sd, name))) break;
             }
             return;
         }
 
         // testing now for standard names
         const libnamea = "lib"~name~".a";
+        auto search = [
+            buildPath(libDir, libnamea), buildPath(lib64Dir, libnamea)
+        ];
         version(Posix) {
             const libnameso = "lib"~name~".so";
+            search ~= [ buildPath(libDir, libnameso), buildPath(lib64Dir, libnameso) ];
         }
         else version(Windows) {
             const namelib = name~".lib";
             const namedll = name~".dll";
+            const libnamedlla = "lib"~name~".dll.a";
+            search ~= [
+                buildPath(libDir, namelib), buildPath(lib64Dir, namelib),
+                buildPath(libDir, libnamedlla), buildPath(lib64Dir, libnamedlla),
+                buildPath(binDir, namedll)
+            ];
         }
 
-        bool searchDir(in string dir) {
-            if (!exists(dir)) return false;
-            if (testFile(dir, libnamea)) return true;
-            version(Posix) {
-                if (testFile(dir, libnameso)) return true;
-            }
-            else {
-                if (testFile(dir, namelib)) return true;
-                if (testFile(dir, namedll)) return true;
-            }
-            return false;
-        }
-
-        foreach (sd; searchDirs) {
-            if (searchDir(sd)) break;
+        foreach(s; search) {
+            if (testFile(s)) break;
         }
     }
 }
