@@ -215,13 +215,54 @@ private class ArchiveFetchSource : Source
         return srcDir;
     }
 
-    private string extractZip(in string archive, in string)
+    private string extractZip(in string archive, in string workDir)
     {
-        import std.stdio : writefln;
+        import std.digest.crc : crc32Of;
+        import std.exception : enforce;
+        import std.file : exists, isDir, mkdirRecurse, read, write;
+        import std.path : buildNormalizedPath, buildPath, dirName, pathSplitter;
+        import std.stdio : writeln, writefln;
+        import std.zip : ZipArchive;
 
         writefln("extracting %s", archive);
-        assert(false, "unimplemented");
+        auto zip = new ZipArchive(read(archive));
+        string extractDir;
+        string srcDir;
+        string rootDir;
+        bool singleRoot = true;
+
+        foreach(n, m; zip.directory) {
+            const dir = pathSplitter(n).front;
+            if (rootDir && dir != rootDir) {
+                singleRoot = false;
+                break;
+            }
+            if (!rootDir) rootDir = dir;
+        }
+        if (singleRoot) {
+            extractDir = workDir;
+            srcDir = buildPath(workDir, rootDir);
+        }
+        else {
+            extractDir = buildPath(workDir, "src");
+            srcDir = extractDir;
+        }
+
+        foreach(n, m; zip.directory) {
+            const file = buildNormalizedPath(extractDir, n);
+            if ((exists(file) && isDir(file)) || m.expandedSize == 0) continue;
+            mkdirRecurse(dirName(file));
+            zip.expand(m);
+            enforce(m.expandedData.length == cast(size_t)m.expandedSize, "zip data does not have expected size");
+            const crc32 = crc32Of(m.expandedData);
+            const crc32_ = *(cast(const(uint)*)&crc32[0]);
+            enforce(crc32_ == m.crc32, "CRC32 zip check failed");
+            write(file, m.expandedData);
+        }
+
+        return srcDir;
     }
+
 }
 
 private class GitSource : Source
