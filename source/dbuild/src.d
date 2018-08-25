@@ -105,25 +105,31 @@ private class ArchiveFetchSource : Source
     override string obtain(in string workDir)
     {
         import dbuild.util : lockFile;
+        import std.file : exists, isDir;
+        import std.path : buildPath;
+        import std.uri : decode;
+
+        const decoded = decode(url);
+        const fn = urlLastComp(decoded);
+        const archive = buildPath(workDir, fn);
+
+        const ldn = likelySrcDirName(archive);
+        if (exists(ldn) && isDir(ldn)) {
+            return ldn;
+        }
 
         auto lock = lockFile(srcLockPath(workDir));
-        const archive = downloadArchive(workDir);
+        downloadArchive(archive);
         return extractArchive(archive, workDir);
     }
 
-    private string downloadArchive(in string workDir)
+    private void downloadArchive(in string archive)
     {
         import dbuild.util : checkMd5;
         import std.exception : enforce;
         import std.file : exists;
         import std.net.curl : download;
-        import std.path : buildPath;
-        import std.uri : decode;
         import std.stdio : writefln;
-
-        const decoded = decode(url);
-        const fn = urlLastComp(decoded);
-        const archive = buildPath(workDir, fn);
 
         if (!exists(archive) || !(md5.length && checkMd5(archive, md5))) {
             if (exists(archive)) {
@@ -135,8 +141,6 @@ private class ArchiveFetchSource : Source
 
             enforce(!md5.length || checkMd5(archive, md5), "wrong md5 sum for "~archive);
         }
-
-        return archive;
     }
 
     private string extractArchive(in string archive, in string workDir)
@@ -262,7 +266,6 @@ private class ArchiveFetchSource : Source
 
         return srcDir;
     }
-
 }
 
 private class GitSource : Source
@@ -355,4 +358,24 @@ private string urlLastComp(in string url)
         ind--;
     }
     return url[ind+1 .. $];
+}
+
+private string likelySrcDirName(in string archive)
+{
+    import std.algorithm : endsWith;
+    import std.uni : toLower;
+
+    assert(isSupportedArchiveExt(archive));
+
+    foreach(ext; supportedArchiveExts) {
+        if (archive.toLower.endsWith(ext)) {
+            return archive[0 .. $-ext.length];
+        }
+    }
+    assert(false);
+}
+
+unittest
+{
+    assert(likelySrcDirName("/path/archivename.tar.gz") == "/path/archivename");
 }
