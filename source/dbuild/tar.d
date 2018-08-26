@@ -53,7 +53,7 @@ bool isSingleRootDir(in string archive, out string rootDir)
         enforce(chunk.length == blockSize);
         TarHeader *hp = cast(TarHeader*)&chunk[0];
 
-        if (hp.typeFlag == TypeFlag.directory /+ || hp.typeFlag == TypeFlag.file +/) {
+        if (hp.typeFlag == TypeFlag.dir /+ || hp.typeFlag == TypeFlag.reg +/) {
             const name = trunc(hp.filename);
             const rd = findSplit(name, "/")[0];
             if (!rootDir.length) {
@@ -80,7 +80,7 @@ void extractTo(in string archive, in string directory)
     import std.exception : enforce;
     import std.file : mkdir, mkdirRecurse, setAttributes;
     import std.path : buildPath;
-    import std.stdio : File;
+    import std.stdio : File, stderr;
 
     mkdirRecurse(directory);
 
@@ -105,7 +105,7 @@ void extractTo(in string archive, in string directory)
 
         // Check the checksum
         if(!th.confirmChecksum()) {
-            throw new Exception("Tar invalid checksum for "~archive);
+            throw new Exception("Tar invalid checksum in "~archive);
         }
 
         string filename = trunc(th.filename);
@@ -115,11 +115,17 @@ void extractTo(in string archive, in string directory)
         auto sz = cast(size_t)octalStrToLong(th.size);
 
         // TODO mode
-        if (th.typeFlag == TypeFlag.directory) {
+        if (th.typeFlag == TypeFlag.dir) {
             const path = buildPath(directory, filename);
             mkdir(path);
         }
-        else if (th.typeFlag == TypeFlag.file) {
+        else {
+            if (th.typeFlag != TypeFlag.reg && th.typeFlag != TypeFlag.areg) {
+                stderr.writefln(
+                    "Unknown tar file type for \"%s\" : %s. Treating as regular file",
+                    filename, th.typeFlag
+                );
+            }
             const path = buildPath(directory, filename);
 
             {
@@ -143,21 +149,15 @@ private enum blockSize = 512;
 
 private enum TypeFlag : ubyte
 {
-    altFile = 0,
-    file = '0',
-    hardLink = '1',
-    symbolicLink = '2',
-    characterSpecial = '3',
-    blockSpecial = '4',
-    directory = '5',
-    fifo = '6',
-    contiguousFile = '7',
-}
-
-private struct Uint12
-{
-    uint hi;
-    ulong lo;
+    areg    = 0,
+    reg     = '0',
+    link    = '1',
+    sym     = '2',
+    chr     = '3',
+    blk     = '4',
+    dir     = '5',
+    fifo    = '6',
+    cont    = '7',
 }
 
 private struct TarHeader
