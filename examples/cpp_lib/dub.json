@@ -1,0 +1,12 @@
+{
+	"name": "cpp_lib",
+	"authors": [
+		"Remi Thebault"
+	],
+	"description": "Dbuild example: building C++ library",
+	"copyright": "Copyright © 2018, Remi Thebault",
+	"license": "MIT",
+	"dependencies": {
+		"dbuild": { "path": "../.." }
+	}
+}

@@ -5,5 +5,8 @@
 	],
 	"description": "Write D code to build C/C++ packages",
 	"copyright": "Copyright © 2018, Remi Thebault",
-	"license": "MIT"
+	"license": "MIT",
+	"subPackages": [
+		"examples/cpp_lib"
+	]
 }
