@@ -7,6 +7,8 @@ import std.concurrency : Tid;
 import std.parallelism : totalCPUs;
 import std.stdio;
 
+/// Build the recipe using maxJobs parallel CPU jobs.
+/// If outputs is not null, only these targets and their dependencies are built.
 void cookRecipe(Recipe recipe, string[] outputs=null, in uint maxJobs = totalCPUs)
 {
     import std.algorithm : canFind;
@@ -24,6 +26,26 @@ void cookRecipe(Recipe recipe, string[] outputs=null, in uint maxJobs = totalCPU
     }
 
     plan.build(maxJobs);
+}
+
+/// Clean the recipe by deleting all output files of all builds.
+/// Directories of these files that become empty are also deleted.
+void cleanRecipe(Recipe recipe)
+{
+    import std.file : dirEntries, exists, remove, rmdir, SpanMode;
+    import std.path : dirName;
+
+    auto graph = prepareGraph(recipe);
+
+    foreach (k, n; graph.nodes) {
+        if (n.inEdge && exists(n.path)) {
+            remove(n.path);
+            const dir = dirName(n.path);
+            if (dirEntries(dir, SpanMode.shallow).empty) {
+                rmdir(dir);
+            }
+        }
+    }
 }
 
 /// Exception thrown when a build fails to complete

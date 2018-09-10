@@ -1,6 +1,6 @@
 import dbuild.cook;
 
-void main()
+void main(string[] args)
 {
     auto recipe = Recipe (
         [
@@ -58,5 +58,10 @@ void main()
         ]
     );
 
-    cookRecipe(recipe);
+    if (args.length > 1 && args[1] == "clean") {
+        cleanRecipe(recipe);
+    }
+    else {
+        cookRecipe(recipe);
+    }
 }
