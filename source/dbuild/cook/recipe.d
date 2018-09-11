@@ -146,10 +146,49 @@ struct Build
     private uint _jobs;
 }
 
+/// A recipe is a set of rules and builds working together, optionally with
+/// toplevel bindings and a cache directory
 struct Recipe
 {
+    /// Set of rules that are used by the builds to describe how to transform
+    /// inputs to outputs
     Rule[] rules;
+    /// Set of builds describing the dependency graph
     Build[] builds;
+    /// Top level bindings. Use this for example to store cflags for default or release builds
     string[string] bindings;
+    /// The directory where cook will load and write the cache files.
+    /// Defaults to the current working directory if null.
     string cacheDir;
+
+    this(Rule[] rules, Build[] builds)
+    {
+        this.rules = rules;
+        this.builds = builds;
+    }
+
+
+    Recipe withBinding(in string binding, in string value) {
+        this.bindings[binding] = value;
+        return this;
+    }
+
+    Recipe withBindings(string[string] bindings) {
+        this.bindings = bindings;
+        return this;
+    }
+
+    Recipe withBindings(Args...)(Args args) {
+        static assert(args.length % 2 == 0, "must give pairs of keys and values");
+        static foreach (i; 0 .. args.length/2) {
+            this.bindings[args[i*2]] = args[i*2 + 1];
+        }
+        return this;
+    }
+
+    Recipe withCacheDir(in string dir)
+    {
+        this.cacheDir = dir;
+        return this;
+    }
 }

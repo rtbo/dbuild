@@ -56,7 +56,9 @@ void main(string[] args)
                 .withImplicitInputs(["lib/liblib.so"])
                 .withBinding("lflags", "-L-Llib -L-llib")
         ]
-    );
+    )
+        .withBinding("cflags", "-O3")
+        .withBinding("dflags", "-release");
 
     if (args.length > 1 && args[1] == "clean") {
         cleanRecipe(recipe);
