@@ -1,9 +1,10 @@
 /// A graph is the actual building graph that is built for a given
-/// recipe depending of what need to be updated
+/// recipe depending of what needs to be updated
 module dbuild.cook.graph;
 
 package:
 
+import dbuild.cook.log;
 import dbuild.cook.recipe;
 
 import std.datetime : SysTime;
@@ -12,63 +13,114 @@ import std.stdio;
 class Node
 {
     enum State {
-        unknown         = 0,
-        notExist        = 1 | needsRebuild,
-        dirty           = 2 | needsRebuild,
-        upToDate        = 3,
-        needsRebuild    = 4,
+        unknown,
+        notExist,
+        dirty,
+        upToDate,
     }
 
     this (in string path) {
-        this.path = path;
+        this._path = path;
     }
 
-    string path;
-    State state;
-    SysTime mtime;
-
-    Edge inEdge;
-    Edge[] outEdges;
-
-    void checkState()
-    out {
-        assert(state != State.unknown);
+    @property string path() const {
+        return _path;
     }
-    body {
+
+    @property State state() const {
+        return _state;
+    }
+
+    @property long mtime() const {
+        return _mtime;
+    }
+
+    @property Edge inEdge() {
+        return _inEdge;
+    }
+
+    @property Edge[] outEdges() {
+        return _outEdges;
+    }
+
+    void checkState(CmdLog cmdLog)
+    out (; state != State.unknown)
+    {
         import std.exception : enforce;
-        import std.file : exists, timeLastModified, getcwd;
+        import std.file : exists, timeLastModified;
+
+        if (!inEdge) {
+            enforce(exists(_path), path ~ " does not exist and there is no recipe to build it!");
+            _mtime = timeLastModified(_path).stdTime;
+            _state = State.upToDate;
+            return;
+        }
 
         if (!exists(path)) {
-            enforce(inEdge !is null, path ~ " does not exist and there is no recipe to build it!");
-            state = State.notExist;
+            _state = State.notExist;
             return;
         }
-        mtime = timeLastModified(path);
-        if (!inEdge) {
-            state = State.upToDate;
-            return;
-        }
+        _mtime = timeLastModified(_path).stdTime;
+        long mostRecentInput;
         foreach (n; inEdge.updateOnlyInputs) {
-            n.checkStateIfNeeded();
-            if (n.needsRebuild || n.mtime >= mtime) {
-                state = State.dirty;
+            // warning: n.needsRebuild recomputes n.mtime
+            if (n.needsRebuild(cmdLog) || n.mtime > mtime) {
+                _state = State.dirty;
                 return;
             }
+            if (mostRecentInput < n.mtime) mostRecentInput = n.mtime;
         }
-        state = State.upToDate;
+        auto entry = cmdLog.entry(_path);
+        if (entry) {
+            const hash = _inEdge.cmdHash;
+            if (hash != entry.hash || mostRecentInput > entry.mtime) {
+                // if command has changed or if last build is oder than most recent input
+                _state = State.dirty;
+            }
+            else {
+                _state = State.upToDate;
+            }
+        }
+        else {
+            _state = State.dirty;
+        }
     }
 
-    void checkStateIfNeeded() {
-        if (state == State.unknown) {
-            checkState();
-        }
-    }
-
-    @property bool needsRebuild() const
-    in (state != State.unknown)
+    void checkStateIfNeeded(CmdLog cmdLog)
     {
-        return cast(int)(state & State.needsRebuild) != 0;
+        if (state == State.unknown) {
+            checkState(cmdLog);
+        }
     }
+
+    bool needsRebuild(CmdLog cmdLog)
+    {
+        checkStateIfNeeded(cmdLog);
+        return _state == State.notExist || _state == State.dirty;
+    }
+
+    void postBuild(CmdLog cmdLog)
+    in (_inEdge !is null)
+    {
+        import std.exception : enforce;
+        import std.file : exists, timeLastModified;
+
+        enforce(exists(_path));
+        _mtime = timeLastModified(_path).stdTime;
+        const hash = _inEdge.cmdHash;
+        const entry = CmdLog.Entry(_mtime, hash);
+        cmdLog.setEntry(_path, entry);
+        _state = State.upToDate;
+    }
+
+private:
+
+    string _path;
+    State _state;
+    long _mtime;
+
+    Edge _inEdge;
+    Edge[] _outEdges;
 }
 
 
@@ -90,55 +142,104 @@ class Edge
     }
 
     /// index of this edge in BuildGraph.edges array
-    size_t ind;
+    @property size_t ind() const {
+        return _ind;
+    }
 
     /// the rule to build outputs from inputs
-    Rule rule;
+    @property Rule rule() const {
+        return _rule;
+    }
 
     /// number of parallel jobs consumed by this edge
     @property uint jobs() const {
         return _jobs > 0 ? _jobs : rule.jobs;
     }
-    private uint _jobs;
 
-    State state;
+    @property State state() const {
+        return _state;
+    }
 
-    Node[] allInputs;
-    Node[] inputs;
-    Node[] implicitInputs;
-    Node[] orderOnlyInputs;
+    @property inout(Node)[] allInputs() inout {
+        return _allInputs;
+    }
+    @property inout(Node)[] inputs() inout {
+        return _inputs;
+    }
+    @property inout(Node)[] implicitInputs() inout {
+        return _implicitInputs;
+    }
+    @property inout(Node)[] orderOnlyInputs() inout {
+        return _orderOnlyInputs;
+    }
 
     @property Node[] updateOnlyInputs() {
         return allInputs[0 .. inputs.length+implicitInputs.length];
     }
 
-    Node[] allOutputs;
-    Node[] outputs;
-    Node[] implicitOutputs;
 
-    string[string] bindings;
+    @property inout(Node)[] allOutputs() inout {
+        return _allOutputs;
+    }
+    @property inout(Node)[] outputs() inout {
+        return _outputs;
+    }
+    @property inout(Node)[] implicitOutputs() inout {
+        return _implicitOutputs;
+    }
 
-    // linked list for available edges
-    Edge prev;
-    Edge next;
+    // linked list for cook plan available edges
+    package Edge prev;
+    package Edge next;
 
     override string toString()
     {
         import std.algorithm : map;
-        import std.format : format;
+        import std.conv : to;
 
-        return format("%s", outputs.map!(n => n.path));
+        return outputs.map!(n => n.path).to!string;
     }
 
-    void translateRule(BindingStack bindings)
+    @property string command()
     {
-        rule._command = processString(rule.command, bindings);
-        rule._description = processString(rule.description, bindings);
+        if (!_ruleTranslated) translateRule();
+        return rule.command;
+    }
+
+    @property string description()
+    {
+        if (!_ruleTranslated) translateRule();
+        return rule.description;
+    }
+
+    @property ulong cmdHash()
+    {
+        if (!_ruleTranslated) translateRule();
+        if (rule.command) {
+            import std.digest.crc : crc64ECMAOf;
+            const crc = crc64ECMAOf(rule.command);
+            return *(cast(const(ulong)*)&crc[0]);
+        }
+        else {
+            assert(false);
+        }
+    }
+
+    package @property void state(State state)
+    {
+        _state = state;
     }
 
 private:
 
-    string processString(string str, BindingStack bindings)
+    void translateRule()
+    {
+        _rule._command = processString(rule.command);
+        _rule._description = processString(rule.description);
+        _ruleTranslated = true;
+    }
+
+    string processString(string str)
     {
         import std.array : join;
         import std.ascii : isAlpha, isAlphaNum;
@@ -166,7 +267,7 @@ private:
                 else {
                     enforce(varName.length, str~": binding with empty name is forbidden");
 
-                    res ~= getBinding(varName, bindings);
+                    res ~= getBinding(varName);
                     varName.length = 0;
                     dollar = false;
                 }
@@ -174,13 +275,13 @@ private:
             res ~= c;
         }
         if (varName.length) {
-            res ~= getBinding(varName, bindings);
+            res ~= getBinding(varName);
         }
 
         return res;
     }
 
-    string getBinding(string key, BindingStack bindings)
+    string getBinding(string key)
     {
         import std.algorithm : map;
         import std.array : join;
@@ -192,114 +293,108 @@ private:
         case "out":
             return outputs.map!("a.path").join(" ");
         default:
-            return bindings.lookUp(key);
+            auto p = key in _edgeBindings;
+            if (p) return *p;
+            p = key in _graphBindings;
+            if (p) return *p;
+            return null;
         }
     }
 
+    size_t _ind;
+    State _state;
+    Rule _rule;
+    uint _jobs;
+
+    Node[] _allInputs;
+    Node[] _inputs;
+    Node[] _implicitInputs;
+    Node[] _orderOnlyInputs;
+
+    Node[] _allOutputs;
+    Node[] _outputs;
+    Node[] _implicitOutputs;
+
+    string[string] _graphBindings;
+    string[string] _edgeBindings;
+    bool _ruleTranslated;
 }
 
 class BuildGraph
 {
-    this(Node[string] nodes, Edge[] edges, string[string] bindings)
+    this (Recipe recipe)
     {
-        this.nodes = nodes;
-        this.edges = edges;
-        this.bindings = bindings;
+        import std.exception : enforce;
+
+        this.bindings = recipe.bindings;
+
+        Rule[string] rules;
+
+        foreach (const ref r; recipe.rules) {
+            rules[r.name] = r;
+        }
+
+        void fillNodes(in string[] paths, Node[] nn) {
+            assert(paths.length == nn.length);
+            foreach (i, p; paths) {
+                auto np = p in nodes;
+                if (np) {
+                    nn[i] = *np;
+                }
+                else {
+                    auto n = new Node(p);
+                    nn[i] = n;
+                    nodes[p] = n;
+                }
+            }
+        }
+
+        edges.reserve(recipe.builds.length);
+
+        foreach (ref b; recipe.builds) {
+            auto edge = new Edge;
+            edge._ind = edges.length;
+            edge._rule = rules[b.rule];
+            edge._jobs = b.jobs;
+            enforce(edge.jobs > 0, "cannot have jobs == 0");
+            edge._edgeBindings = b.bindings;
+            edge._graphBindings = bindings;
+
+            const i = b.inputs.length;
+            const ii = b.implicitInputs.length;
+            const ooi = b.orderOnlyInputs.length;
+            const o = b.outputs.length;
+            const io = b.implicitOutputs.length;
+
+            edge._allInputs = new Node[ i + ii + ooi ];
+            edge._allOutputs = new Node[ o + io ];
+            edge._inputs = edge.allInputs[ 0 .. i ];
+            edge._implicitInputs = edge.allInputs[ i .. i+ii ];
+            edge._orderOnlyInputs = edge.allInputs[ i+ii .. i+ii+io ];
+            edge._outputs = edge.allOutputs[ 0 .. o ];
+            edge._implicitOutputs = edge.allOutputs[ o .. o+io ];
+
+            fillNodes(b.inputs, edge._inputs);
+            fillNodes(b.implicitInputs, edge._implicitInputs);
+            fillNodes(b.orderOnlyInputs, edge._orderOnlyInputs);
+            fillNodes(b.outputs, edge._outputs);
+            fillNodes(b.implicitOutputs, edge._implicitOutputs);
+
+            foreach (n; edge.allInputs) {
+                n._outEdges ~= edge;
+            }
+            foreach (n; edge.allOutputs) {
+                import std.exception : enforce;
+
+                enforce(n.inEdge is null, "more than one build for the same output: "~n.path);
+                n._inEdge = edge;
+            }
+
+            edges ~= edge;
+        }
     }
 
     Node[string] nodes;
     Edge[] edges;
     string[string] bindings;
-}
-
-BuildGraph prepareGraph(Recipe recipe)
-{
-    import std.exception : enforce;
-
-    Rule[string] rules;
-    Node[string] nodes;
-    Edge[] edges;
-
-    foreach (const ref r; recipe.rules) {
-        rules[r.name] = r;
-    }
-
-    void fillNodes(in string[] paths, Node[] nn) {
-        assert(paths.length == nn.length);
-        foreach (i, p; paths) {
-            auto np = p in nodes;
-            if (np) {
-                nn[i] = *np;
-            }
-            else {
-                auto n = new Node(p);
-                nn[i] = n;
-                nodes[p] = n;
-            }
-        }
-    }
-
-    edges.reserve(recipe.builds.length);
-
-    foreach (ref b; recipe.builds) {
-        auto edge = new Edge;
-        edge.ind = edges.length;
-        edge.rule = rules[b.rule];
-        edge._jobs = b.jobs;
-        enforce(edge.jobs > 0, "cannot have jobs == 0");
-        edge.bindings = b.bindings;
-
-        const i = b.inputs.length;
-        const ii = b.implicitInputs.length;
-        const ooi = b.orderOnlyInputs.length;
-        const o = b.outputs.length;
-        const io = b.implicitOutputs.length;
-
-        edge.allInputs = new Node[ i + ii + ooi ];
-        edge.allOutputs = new Node[ o + io ];
-        edge.inputs = edge.allInputs[ 0 .. i ];
-        edge.implicitInputs = edge.allInputs[ i .. i+ii ];
-        edge.orderOnlyInputs = edge.allInputs[ i+ii .. i+ii+io ];
-        edge.outputs = edge.allOutputs[ 0 .. o ];
-        edge.implicitOutputs = edge.allOutputs[ o .. o+io ];
-
-        fillNodes(b.inputs, edge.inputs);
-        fillNodes(b.implicitInputs, edge.implicitInputs);
-        fillNodes(b.orderOnlyInputs, edge.orderOnlyInputs);
-        fillNodes(b.outputs, edge.outputs);
-        fillNodes(b.implicitOutputs, edge.implicitOutputs);
-        foreach (n; edge.allInputs) {
-            n.outEdges ~= edge;
-        }
-        foreach (n; edge.allOutputs) {
-            import std.exception : enforce;
-
-            enforce(n.inEdge is null);
-            n.inEdge = edge;
-        }
-
-        edges ~= edge;
-    }
-
-    return new BuildGraph(nodes, edges, recipe.bindings);
-}
-
-
-class BindingStack
-{
-    this (string[string] bindings, BindingStack outer=null) {
-        this.bindings = bindings;
-        this.outer = outer;
-    }
-
-    string lookUp(in string key)
-    {
-        auto b = key in bindings;
-        if (b) return *b;
-        else if (outer) return outer.lookUp(key);
-        else return null;
-    }
-
-    string[string] bindings;
-    BindingStack outer;
 }

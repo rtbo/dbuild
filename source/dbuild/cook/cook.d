@@ -1,7 +1,8 @@
 module dbuild.cook.cook;
 
-import dbuild.cook.recipe;
 import dbuild.cook.graph;
+import dbuild.cook.log;
+import dbuild.cook.recipe;
 
 import std.concurrency : Tid;
 import std.parallelism : totalCPUs;
@@ -13,9 +14,11 @@ void cookRecipe(Recipe recipe, string[] outputs=null, in uint maxJobs = totalCPU
 {
     import std.algorithm : canFind;
 
-    auto graph = prepareGraph(recipe);
-
-    auto plan = new BuildPlan(graph);
+    auto graph = new BuildGraph(recipe);
+    auto plan = new BuildPlan(graph, recipe);
+    scope(exit) {
+        plan.cmdLog.writeDown();
+    }
 
     foreach (k, n; graph.nodes) {
         if (!n.outEdges.length) {
@@ -33,9 +36,9 @@ void cookRecipe(Recipe recipe, string[] outputs=null, in uint maxJobs = totalCPU
 void cleanRecipe(Recipe recipe)
 {
     import std.file : dirEntries, exists, remove, rmdir, SpanMode;
-    import std.path : dirName;
+    import std.path : buildPath, dirName;
 
-    auto graph = prepareGraph(recipe);
+    auto graph = new BuildGraph(recipe);
 
     foreach (k, n; graph.nodes) {
         if (n.inEdge && exists(n.path)) {
@@ -45,6 +48,17 @@ void cleanRecipe(Recipe recipe)
                 rmdir(dir);
             }
         }
+    }
+
+    const cd = recipe.cacheDir;
+    const logpath = buildPath(recipe.cacheDir, ".cook_log");
+
+    if (exists(logpath)) {
+        remove(logpath);
+    }
+
+    if (dirEntries(cd, SpanMode.shallow).empty) {
+        rmdir(cd);
     }
 }
 
@@ -89,13 +103,18 @@ private:
 
 class BuildPlan
 {
-    this (BuildGraph graph) {
+    this (BuildGraph graph, Recipe recipe)
+    {
+        import std.path : buildPath;
+
         this.graph = graph;
+        this.recipe = recipe;
+        this.cmdLog = new CmdLog(buildPath(recipe.cacheDir, ".cook_log"));
     }
 
-    void addTarget(Node target) {
-        target.checkState();
-        if (target.needsRebuild) {
+    void addTarget(Node target)
+    {
+        if (target.needsRebuild(cmdLog)) {
             targets ~= target;
             addEdgeToPlan(target.inEdge);
         }
@@ -108,8 +127,6 @@ class BuildPlan
         import std.concurrency : receive, receiveTimeout;
         import std.exception : enforce;
 
-        auto bindStack = new BindingStack(graph.bindings);
-
         uint jobs;
 
         while (availFirst) {
@@ -119,7 +136,7 @@ class BuildPlan
             while (e && jobs < maxJobs) {
                 if (e.state != Edge.State.inProgress) {
                     jobs += e.jobs;
-                    buildEdge(e, new BindingStack(e.bindings, bindStack));
+                    buildEdge(e);
                 }
                 e = e.next;
             }
@@ -132,12 +149,11 @@ class BuildPlan
                 edge.state = Edge.State.completed;
 
                 foreach (o; edge.allOutputs) {
-                    o.checkState();
                     // o.state = Node.State.upToDate;
-                    enforce(!o.needsRebuild);
+                    o.postBuild(cmdLog);
 
                     foreach (e; o.outEdges.filter!(e => e.state == Edge.State.mustBuild)) {
-                        if (e.updateOnlyInputs.all!(i => !i.needsRebuild)) {
+                        if (e.updateOnlyInputs.all!(i => !i.needsRebuild(cmdLog))) {
                             addAvailable(e);
                             e.state = Edge.State.available;
                         }
@@ -163,11 +179,12 @@ private:
     void addEdgeToPlan(Edge edge)
     {
         edge.state = Edge.State.mustBuild;
+        ++edgeCount;
+
         bool hasDepRebuild;
 
         foreach (n; edge.allInputs) {
-            n.checkStateIfNeeded();
-            hasDepRebuild = n.needsRebuild;
+            hasDepRebuild = n.needsRebuild(cmdLog);
             if (hasDepRebuild && n.inEdge.state == Edge.State.unknown) {
                 // edge not yet visited
                 addEdgeToPlan(n.inEdge);
@@ -234,45 +251,45 @@ private:
         edge.prev = null;
     }
 
+
+    void buildEdge(Edge edge)
+    {
+        import std.algorithm : map;
+        import std.concurrency : spawn, thisTid;
+        import std.exception : enforce;
+        import std.file : mkdirRecurse;
+        import std.path : dirName;
+        import std.stdio : writefln;
+
+        edge.state = Edge.State.inProgress;
+
+        writeln(edge.description);
+
+        foreach (n; edge.allOutputs) {
+            mkdirRecurse(dirName(n.path));
+        }
+
+        if (!edge.command) {
+            //enforce(!rule.command.length, rule.name ~ " rule must have either command or commandDg");
+            // TODO
+        }
+        else {
+            enforce(edge.command.length, edge.rule.name ~ " rule must have either command or commandDg");
+            spawn(&runEdgeCommand, thisTid, edge.ind, edge.command);
+        }
+    }
+
     BuildGraph graph;
+    Recipe recipe;
+    CmdLog cmdLog;
     Node[] targets;
     Edge availFirst;
     Edge availLast;
+    int edgeCount;
 }
 
-void buildEdge(Edge edge, BindingStack bindStack)
+string[] splitCommand(in string cmd)
 {
-    import std.algorithm : map;
-    import std.concurrency : spawn, thisTid;
-    import std.exception : enforce;
-    import std.file : mkdirRecurse;
-    import std.path : dirName;
-    import std.stdio : writefln;
-
-    edge.state = Edge.State.inProgress;
-    edge.translateRule(bindStack);
-    auto rule = edge.rule;
-
-    writeln(rule.description);
-
-    foreach (n; edge.allOutputs) {
-        mkdirRecurse(dirName(n.path));
-    }
-
-    if (rule.commandDg) {
-        enforce(!rule.command.length, rule.name ~ " rule must have either command or commandDg");
-        // TODO
-    }
-    else {
-        enforce(rule.command.length, rule.name ~ " rule must have either command or commandDg");
-        immutable cmd = splitCommand(rule.command);
-        spawn(&runEdgeCommand, thisTid, edge.ind, cmd);
-    }
-}
-
-immutable(string[]) splitCommand(in string cmd)
-{
-    import std.exception : assumeUnique;
     import std.ascii : isWhite;
 
     string[] res;
@@ -304,7 +321,7 @@ immutable(string[]) splitCommand(in string cmd)
 
     if (arg.length) res ~= arg;
 
-    return assumeUnique(res);
+    return res;
 }
 
 unittest
@@ -316,7 +333,7 @@ unittest
     assert(splitCommand(`exe "$1\" again"  $2`) == [`exe`, `$1" again`, `$2`]);
 }
 
-void runEdgeCommand(Tid owner, size_t edgeInd, immutable(string[]) cmd)
+void runEdgeCommand(Tid owner, size_t edgeInd, in string cmdStr)
 {
     import core.thread : Thread;
     import std.concurrency : send;
@@ -326,6 +343,7 @@ void runEdgeCommand(Tid owner, size_t edgeInd, immutable(string[]) cmd)
 
     string outBuf;
     string errBuf;
+    const cmd = splitCommand(cmdStr);
 
     try {
         auto outF = pipe();

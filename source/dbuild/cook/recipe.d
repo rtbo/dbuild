@@ -159,7 +159,13 @@ struct Recipe
     string[string] bindings;
     /// The directory where cook will load and write the cache files.
     /// Defaults to the current working directory if null.
-    string cacheDir;
+    @property string cacheDir()
+    {
+        import std.file : getcwd;
+
+        return _cacheDir ? _cacheDir : getcwd();
+    }
+    private string _cacheDir;
 
     this(Rule[] rules, Build[] builds)
     {
@@ -188,7 +194,7 @@ struct Recipe
 
     Recipe withCacheDir(in string dir)
     {
-        this.cacheDir = dir;
+        this._cacheDir = dir;
         return this;
     }
 }
