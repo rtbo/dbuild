@@ -370,7 +370,6 @@ void runEdgeCommand(Tid owner, size_t edgeInd, in string cmdStr)
     catch (Exception ex) {
         send(owner, EdgeFailed(edgeInd, 0, outBuf, cmdStr));
     }
-
 }
 
 void sleepJob(Tid owner, size_t edgeInd, uint msecs)
