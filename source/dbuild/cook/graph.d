@@ -236,6 +236,7 @@ private:
     {
         _rule._command = processString(rule.command);
         _rule._description = processString(rule.description);
+        _rule._depfile = processString(rule.depfile);
         _ruleTranslated = true;
     }
 

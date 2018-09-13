@@ -1,5 +1,6 @@
 module dbuild.cook.cook;
 
+import dbuild.cook.deps;
 import dbuild.cook.graph;
 import dbuild.cook.log;
 import dbuild.cook.recipe;
@@ -144,7 +145,7 @@ class BuildPlan
                 removeReady(edge);
                 edge.state = Edge.State.completed;
                 if (ec.output.length) {
-                    writefln("%s\n%s", ec.cmd, ec.output);
+                    writefln("%s\n%s", ec.rule.cmd, ec.output);
                 }
 
                 foreach (o; edge.allOutputs) {
@@ -163,7 +164,7 @@ class BuildPlan
             void failure (EdgeFailed ef)
             {
                 auto edge = graph.edges[ef.ind];
-                throw new BuildFailedException(edge.description, ef.cmd, ef.output, ef.code);
+                throw new BuildFailedException(edge.description, ef.rule.cmd, ef.output, ef.code);
             }
 
             // must wait for at least one job
@@ -274,7 +275,7 @@ private:
         }
         else {
             enforce(edge.command.length, edge.rule.name ~ " rule must have either command or commandDg");
-            spawn(&runEdgeCommand, thisTid, edge.ind, edge.command);
+            spawn(&runEdgeCommand, thisTid, edge.ind, CmdRule(edge.rule));
         }
     }
 
@@ -332,14 +333,47 @@ unittest
     assert(splitCommand(`exe "$1\" again"  $2`) == [`exe`, `$1" again`, `$2`]);
 }
 
-void runEdgeCommand(Tid owner, size_t edgeInd, in string cmdStr)
+struct CmdRule
+{
+    this(Rule rule) {
+        assert(rule.command.length);
+        name = rule.name;
+        cmd = rule.command;
+        depfile = rule.depfile;
+        deps = rule.deps;
+    }
+
+    string name;
+    string cmd;
+    string depfile;
+    Deps deps;
+}
+
+struct EdgeCompleted
+{
+    size_t ind;
+    string output;
+    CmdRule rule;
+    immutable(string)[] deps;
+}
+
+struct EdgeFailed
+{
+    size_t ind;
+    int code;
+    string output;
+    CmdRule rule;
+}
+
+void runEdgeCommand(Tid owner, size_t edgeInd, in CmdRule rule)
 {
     import std.concurrency : send;
+    import std.exception : enforce;
     import std.process : pipe, spawnProcess, wait;
     import std.typecons : Yes;
 
     string outBuf;
-    const cmd = splitCommand(cmdStr);
+    const cmd = splitCommand(rule.cmd);
 
     try {
         version(Posix) {
@@ -360,39 +394,25 @@ void runEdgeCommand(Tid owner, size_t edgeInd, in string cmdStr)
 
         int code = wait(pid);
 
+        string[] deps;
+        switch (rule.deps) {
+        case Deps.gcc:
+            enforce(rule.depfile, rule.name ~ ": deps gcc must be with a depfile");
+            deps = readMkDepFile(rule.depfile);
+            break;
+        default:
+            break;
+        }
+
         if (code) {
-            send(owner, EdgeFailed(edgeInd, code, outBuf, cmdStr));
+            send(owner, EdgeFailed(edgeInd, code, outBuf, rule));
         }
         else {
-            send(owner, EdgeCompleted(edgeInd, outBuf, cmdStr));
+            import std.exception : assumeUnique;
+            send(owner, EdgeCompleted(edgeInd, outBuf, rule, assumeUnique(deps)));
         }
     }
     catch (Exception ex) {
-        send(owner, EdgeFailed(edgeInd, 0, outBuf, cmdStr));
+        send(owner, EdgeFailed(edgeInd, 0, outBuf, rule));
     }
-}
-
-void sleepJob(Tid owner, size_t edgeInd, uint msecs)
-{
-    import core.thread : Thread;
-    import core.time : dur;
-    import std.concurrency : send;
-
-    Thread.sleep(dur!"msecs"(msecs));
-    send(owner, EdgeCompleted(edgeInd));
-}
-
-struct EdgeCompleted
-{
-    size_t ind;
-    string output;
-    string cmd;
-}
-
-struct EdgeFailed
-{
-    size_t ind;
-    int code;
-    string output;
-    string cmd;
 }
