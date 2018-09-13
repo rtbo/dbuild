@@ -66,33 +66,28 @@ void cleanRecipe(Recipe recipe)
 class BuildFailedException : Exception
 {
     string desc;
-    string stdout;
-    string stderr;
+    string cmd;
+    string output;
     int code;
 
-    private this (Edge edge, int code, string stdout, string stderr)
+    private this (string desc, string cmd, string output, int code)
     {
         import std.conv : to;
 
-        auto rule = edge.rule;
-
-        this.desc = rule.description;
+        this.desc = desc;
+        this.cmd = cmd;
+        this.output = output;
         this.code = code;
-        this.stdout = stdout;
-        this.stderr = stderr;
 
         string msg = "\n" ~ desc ~ " failed";
         if (code) msg ~= " with code " ~ code.to!string;
         msg ~= ":\n";
 
-        if (rule.command.length) {
-            msg ~= rule.command ~ "\n";
+        if (cmd.length) {
+            msg ~= cmd ~ "\n";
         }
-        if (stdout.length) {
-            msg ~= stdout ~ "\n";
-        }
-        if (stderr.length) {
-            msg ~= stderr ~ "\n";
+        if (output.length) {
+            msg ~= output ~ "\n";
         }
 
         super( msg );
@@ -126,6 +121,7 @@ class BuildPlan
         import std.algorithm : all, filter;
         import std.concurrency : receive, receiveTimeout;
         import std.exception : enforce;
+        import std.stdio : writefln;
 
         uint jobs;
 
@@ -147,6 +143,9 @@ class BuildPlan
                 jobs -= edge.jobs;
                 removeAvailable(edge);
                 edge.state = Edge.State.completed;
+                if (ec.output.length) {
+                    writefln("%s\n%s", ec.cmd, ec.output);
+                }
 
                 foreach (o; edge.allOutputs) {
                     // o.state = Node.State.upToDate;
@@ -164,7 +163,7 @@ class BuildPlan
             void failure (EdgeFailed ef)
             {
                 auto edge = graph.edges[ef.ind];
-                throw new BuildFailedException(edge, ef.code, ef.output, ef.error);
+                throw new BuildFailedException(edge.description, ef.cmd, ef.output, ef.code);
             }
 
             // must wait for at least one job
@@ -335,45 +334,41 @@ unittest
 
 void runEdgeCommand(Tid owner, size_t edgeInd, in string cmdStr)
 {
-    import core.thread : Thread;
     import std.concurrency : send;
     import std.process : pipe, spawnProcess, wait;
-    import std.stdio : stdin;
     import std.typecons : Yes;
 
     string outBuf;
-    string errBuf;
     const cmd = splitCommand(cmdStr);
 
     try {
-        auto outF = pipe();
-        auto errF = pipe();
-
-        void exhaustPipe(File readEnd, ref string buf) {
-            foreach (l; readEnd.byLine(Yes.keepTerminator)) {
-                buf ~= l;
-            }
+        version(Posix) {
+            auto nul = File("/dev/null", "r");
         }
+        else version (Windows) {
+            auto nul = File("NUL", "r");
+        }
+        else {
+            static assert(false);
+        }
+        auto p = pipe();
+        auto pid = spawnProcess(cmd, nul, p.writeEnd, p.writeEnd);
 
-        auto pid = spawnProcess(cmd, stdin, outF.writeEnd, errF.writeEnd);
-
-        // auto th = new Thread(() {
-        //     exhaustPipe(outF.readEnd, outBuf);
-        // });
-        exhaustPipe(errF.readEnd, errBuf);
-        // th.join();
+        foreach (l; p.readEnd.byLine(Yes.keepTerminator)) {
+            outBuf ~= l.idup;
+        }
 
         int code = wait(pid);
 
         if (code) {
-            send(owner, EdgeFailed(edgeInd, code, outBuf, errBuf));
+            send(owner, EdgeFailed(edgeInd, code, outBuf, cmdStr));
         }
         else {
-            send(owner, EdgeCompleted(edgeInd, outBuf, errBuf));
+            send(owner, EdgeCompleted(edgeInd, outBuf, cmdStr));
         }
     }
     catch (Exception ex) {
-        send(owner, EdgeFailed(edgeInd, 0, outBuf, errBuf));
+        send(owner, EdgeFailed(edgeInd, 0, outBuf, cmdStr));
     }
 
 }
@@ -392,7 +387,7 @@ struct EdgeCompleted
 {
     size_t ind;
     string output;
-    string error;
+    string cmd;
 }
 
 struct EdgeFailed
@@ -400,42 +395,5 @@ struct EdgeFailed
     size_t ind;
     int code;
     string output;
-    string error;
-}
-
-
-// private bool needsUpdate(Node node)
-// {
-//     import std.file : exists, timeLastModified;
-
-//     // primary input, (e.g. source file)
-//     if (!node.inEdge) return false;
-//     // if file is missing, it needs update
-//     if (!exists(node.path)) return true;
-
-//     import std.algorithm : all, map, minElement;
-//     if (!all!(exists)())
-
-// }
-
-private bool needsUpdate(Build build)
-{
-    import std.algorithm : all, map, minElement;
-    import std.file : exists, timeLastModified;
-    import std.range : chain;
-
-    // if input is missing, it will need update after inputs are regenerated
-    if (!all!(exists)(build.outputs
-            .chain(build.inputs)
-            .chain(build.implicitInputs))) {
-        return true;
-    }
-
-    // all inputs and outputs are there, checking if they are up-to-date
-    const outputTime = minElement(build.outputs.map!(timeLastModified));
-    foreach(inputTime; build.inputs.chain(build.implicitInputs).map!(timeLastModified)) {
-        if (inputTime > outputTime) return true;
-    }
-
-    return false;
+    string cmd;
 }
