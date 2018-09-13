@@ -30,6 +30,10 @@ struct Rule
         return _commandDg;
     }
 
+    @property string depfile() const {
+        return _depfile;
+    }
+
     @property Deps deps() const {
         return _deps;
     }
@@ -48,6 +52,12 @@ struct Rule
     {
         _name = name;
         _commandDg = commandDg;
+    }
+
+    Rule withDepfile(in string depfile)
+    {
+        _depfile = depfile;
+        return this;
     }
 
     Rule withDeps(in Deps deps) {
@@ -69,6 +79,7 @@ struct Rule
     package string _description = "Processing $in";
     package string _command;
     package CommandDg _commandDg;
+    package string _depfile;
     package Deps _deps;
     package uint _jobs = 1;
 }
