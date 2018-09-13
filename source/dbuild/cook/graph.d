@@ -132,9 +132,9 @@ class Edge
         unknown,
         // edge must be built
         mustBuild,
-        // edge must be built and is identified as available for building
-        // (meaning all inputs are available)
-        available,
+        // edge must be built and is identified as ready for building
+        // (meaning all inputs are available and up-to-date)
+        ready,
         // build is started but not completed
         inProgress,
         // build is completed
@@ -188,7 +188,7 @@ class Edge
         return _implicitOutputs;
     }
 
-    // linked list for cook plan available edges
+    // linked list for cook plan ready edges
     package Edge prev;
     package Edge next;
 

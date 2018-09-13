@@ -125,9 +125,9 @@ class BuildPlan
 
         uint jobs;
 
-        while (availFirst) {
+        while (readyFirst) {
 
-            auto e = availFirst;
+            auto e = readyFirst;
 
             while (e && jobs < maxJobs) {
                 if (e.state != Edge.State.inProgress) {
@@ -141,7 +141,7 @@ class BuildPlan
             {
                 auto edge = graph.edges[ec.ind];
                 jobs -= edge.jobs;
-                removeAvailable(edge);
+                removeReady(edge);
                 edge.state = Edge.State.completed;
                 if (ec.output.length) {
                     writefln("%s\n%s", ec.cmd, ec.output);
@@ -153,8 +153,8 @@ class BuildPlan
 
                     foreach (e; o.outEdges.filter!(e => e.state == Edge.State.mustBuild)) {
                         if (e.updateOnlyInputs.all!(i => !i.needsRebuild(cmdLog))) {
-                            addAvailable(e);
-                            e.state = Edge.State.available;
+                            addReady(e);
+                            e.state = Edge.State.ready;
                         }
                     }
                 }
@@ -191,29 +191,29 @@ private:
         }
 
         if (!hasDepRebuild) {
-            addAvailable(edge);
-            edge.state = Edge.State.available;
+            addReady(edge);
+            edge.state = Edge.State.ready;
         }
     }
 
-    void addAvailable(Edge edge)
+    void addReady(Edge edge)
     {
-        assert (!isAvailable(edge));
+        assert (!isReady(edge));
 
-        if (!availFirst) {
-            assert(!availLast);
-            availFirst = edge;
-            availLast = edge;
+        if (!readyFirst) {
+            assert(!readyLast);
+            readyFirst = edge;
+            readyLast = edge;
         }
         else {
-            availLast.next = edge;
-            edge.prev = availLast;
-            availLast = edge;
+            readyLast.next = edge;
+            edge.prev = readyLast;
+            readyLast = edge;
         }
     }
 
-    bool isAvailable(Edge edge) {
-        auto e = availFirst;
+    bool isReady(Edge edge) {
+        auto e = readyFirst;
         while (e) {
             if (e is edge) {
                 return true;
@@ -223,22 +223,22 @@ private:
         return false;
     }
 
-    void removeAvailable(Edge edge)
+    void removeReady(Edge edge)
     {
-        assert(isAvailable(edge));
+        assert(isReady(edge));
 
-        if (availFirst is availLast) {
-            assert(availFirst is edge);
-            availFirst = null;
-            availLast = null;
+        if (readyFirst is readyLast) {
+            assert(readyFirst is edge);
+            readyFirst = null;
+            readyLast = null;
         }
-        else if (edge is availFirst) {
-            availFirst = edge.next;
-            availFirst.prev = null;
+        else if (edge is readyFirst) {
+            readyFirst = edge.next;
+            readyFirst.prev = null;
         }
-        else if (edge is availLast) {
-            availLast = edge.prev;
-            availLast.next = null;
+        else if (edge is readyLast) {
+            readyLast = edge.prev;
+            readyLast.next = null;
         }
         else {
             auto prev = edge.prev;
@@ -282,8 +282,8 @@ private:
     Recipe recipe;
     CmdLog cmdLog;
     Node[] targets;
-    Edge availFirst;
-    Edge availLast;
+    Edge readyFirst;
+    Edge readyLast;
     int edgeCount;
 }
 
