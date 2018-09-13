@@ -289,9 +289,9 @@ private:
 
         switch (key) {
         case "in":
-            return inputs.map!("a.path").join(" ");
+            return inputs.map!(i => escapePath(i.path)).join(" ");
         case "out":
-            return outputs.map!("a.path").join(" ");
+            return outputs.map!(o => escapePath(o.path)).join(" ");
         default:
             auto p = key in _edgeBindings;
             if (p) return *p;
@@ -318,6 +318,13 @@ private:
     string[string] _graphBindings;
     string[string] _edgeBindings;
     bool _ruleTranslated;
+}
+
+private string escapePath (in string path)
+{
+    import std.array : replace;
+
+    return path.replace(` `, `\ `).replace(`"`, `\"`);
 }
 
 class BuildGraph
