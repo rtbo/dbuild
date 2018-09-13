@@ -184,10 +184,10 @@ private:
         bool hasDepRebuild;
 
         foreach (n; edge.allInputs) {
-            hasDepRebuild = n.needsRebuild(cmdLog);
-            if (hasDepRebuild && n.inEdge.state == Edge.State.unknown) {
+            if (n.needsRebuild(cmdLog) && n.inEdge.state == Edge.State.unknown) {
                 // edge not yet visited
                 addEdgeToPlan(n.inEdge);
+                hasDepRebuild = true;
             }
         }
 
