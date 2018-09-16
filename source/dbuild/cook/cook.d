@@ -413,6 +413,6 @@ void runEdgeCommand(Tid owner, size_t edgeInd, in CmdRule rule)
         }
     }
     catch (Exception ex) {
-        send(owner, EdgeFailed(edgeInd, 0, outBuf, rule));
+        send(owner, EdgeFailed(edgeInd, 0, ex.msg, rule));
     }
 }
