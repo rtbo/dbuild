@@ -14,6 +14,7 @@ class CmdLog
     {
         long mtime;
         ulong hash;
+        const(string)[] deps;
     }
 
     private Entry[string] entries;
@@ -29,7 +30,9 @@ class CmdLog
         foreach (l; file.byLine) {
             Entry e;
             string output;
-            formattedRead!"%s %s %s"(l, e.mtime, e.hash, output);
+            string[] deps;
+            formattedRead!"%s %s %s %s"(l, output, e.mtime, e.hash, deps);
+            e.deps = deps;
             auto ep = output in entries;
             if (ep) {
                 *ep = e;
@@ -46,9 +49,9 @@ class CmdLog
         scope(exit) file.close();
 
         if (dups*10 > entries.length) {
-            file.reopen(file.name, "wb");
-            foreach (output, entry; entries) {
-                file.writefln("%s %s %s", entry.mtime, entry.hash, output);
+            file.reopen(file.name, "w");
+            foreach (output, e; entries) {
+                file.writefln("%s %s %s %s", output, e.mtime, e.hash, e.deps);
             }
             file.close();
         }
@@ -69,7 +72,7 @@ class CmdLog
         else {
             entries[output] = entry;
         }
-        file.writefln("%s %s %s", entry.mtime, entry.hash, output);
+        file.writefln("%s %s %s %s", output, entry.mtime, entry.hash, entry.deps);
     }
 
 }

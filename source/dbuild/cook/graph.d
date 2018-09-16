@@ -74,7 +74,7 @@ class Node
         if (entry) {
             const hash = _inEdge.cmdHash;
             if (hash != entry.hash || mostRecentInput > entry.mtime) {
-                // if command has changed or if last build is oder than most recent input
+                // if command has changed or if last build is older than most recent input
                 _state = State.dirty;
             }
             else {
@@ -99,7 +99,7 @@ class Node
         return _state == State.notExist || _state == State.dirty;
     }
 
-    void postBuild(CmdLog cmdLog)
+    void postBuild(CmdLog cmdLog, in string[] deps)
     in (_inEdge !is null)
     {
         import std.exception : enforce;
@@ -107,9 +107,11 @@ class Node
 
         enforce(exists(_path));
         _mtime = timeLastModified(_path).stdTime;
+
         const hash = _inEdge.cmdHash;
-        const entry = CmdLog.Entry(_mtime, hash);
+        const entry = CmdLog.Entry(_mtime, hash, deps);
         cmdLog.setEntry(_path, entry);
+
         _state = State.upToDate;
     }
 

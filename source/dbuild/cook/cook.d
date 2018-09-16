@@ -153,7 +153,7 @@ class BuildPlan
 
                 foreach (o; edge.allOutputs) {
                     // o.state = Node.State.upToDate;
-                    o.postBuild(cmdLog);
+                    o.postBuild(cmdLog, ec.deps);
 
                     foreach (e; o.outEdges.filter!(e => e.state == Edge.State.mustBuild)) {
                         if (e.updateOnlyInputs.all!(i => !i.needsRebuild(cmdLog))) {
