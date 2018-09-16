@@ -19,7 +19,8 @@ class Node
         upToDate,
     }
 
-    this (in string path) {
+    private this (BuildGraph graph, in string path) {
+        this._graph = graph;
         this._path = path;
     }
 
@@ -60,17 +61,25 @@ class Node
             _state = State.notExist;
             return;
         }
+
         _mtime = timeLastModified(_path).stdTime;
+
+        auto entry = cmdLog.entry(_path);
+        if (entry && entry.deps.length) {
+            // add dependencies to the graph as implicit input
+            _inEdge.addImplicitInputs(entry.deps);
+        }
+
         long mostRecentInput;
         foreach (n; inEdge.updateOnlyInputs) {
-            // warning: n.needsRebuild recomputes n.mtime
-            if (n.needsRebuild(cmdLog) || n.mtime > mtime) {
+            n.checkStateIfNeeded(cmdLog);
+            if (n.needsRebuild || n.mtime > mtime) {
                 _state = State.dirty;
                 return;
             }
             if (mostRecentInput < n.mtime) mostRecentInput = n.mtime;
         }
-        auto entry = cmdLog.entry(_path);
+
         if (entry) {
             const hash = _inEdge.cmdHash;
             if (hash != entry.hash || mostRecentInput > entry.mtime) {
@@ -78,6 +87,7 @@ class Node
                 _state = State.dirty;
             }
             else {
+
                 _state = State.upToDate;
             }
         }
@@ -93,9 +103,8 @@ class Node
         }
     }
 
-    bool needsRebuild(CmdLog cmdLog)
+    @property bool needsRebuild()
     {
-        checkStateIfNeeded(cmdLog);
         return _state == State.notExist || _state == State.dirty;
     }
 
@@ -117,6 +126,7 @@ class Node
 
 private:
 
+    BuildGraph _graph;
     string _path;
     State _state;
     long _mtime;
@@ -141,6 +151,11 @@ class Edge
         inProgress,
         // build is completed
         completed,
+    }
+
+    private this(BuildGraph graph)
+    {
+        _graph = graph;
     }
 
     /// index of this edge in BuildGraph.edges array
@@ -310,6 +325,38 @@ private:
         }
     }
 
+    void addImplicitInputs(in string[] deps)
+    {
+        import std.algorithm : canFind, map;
+        import std.array : insertInPlace;
+
+        foreach (d; deps)
+        {
+            if (updateOnlyInputs.map!"a.path".canFind(d)) continue;
+
+            auto dnp = d in _graph.nodes;
+            Node dn;
+            if (dnp) {
+                dn = *dnp;
+            }
+            else {
+                dn = new Node(_graph, d);
+                _graph.nodes[d] = dn;
+            }
+
+            dn._outEdges ~= this;
+
+            const size_t ooi = _allInputs.length - _orderOnlyInputs.length;
+            const size_t ii = ooi - _implicitInputs.length;
+
+            insertInPlace(_allInputs, ooi, dn);
+
+            _implicitInputs = _allInputs[ii .. ooi+1];
+            _orderOnlyInputs = _allInputs[ooi+1 .. $];
+        }
+    }
+
+    BuildGraph _graph;
     size_t _ind;
     State _state;
     Rule _rule;
@@ -358,7 +405,7 @@ class BuildGraph
                     nn[i] = *np;
                 }
                 else {
-                    auto n = new Node(p);
+                    auto n = new Node(this, p);
                     nn[i] = n;
                     nodes[p] = n;
                 }
@@ -368,7 +415,7 @@ class BuildGraph
         edges.reserve(recipe.builds.length);
 
         foreach (ref b; recipe.builds) {
-            auto edge = new Edge;
+            auto edge = new Edge(this);
             edge._ind = edges.length;
             edge._rule = rules[b.rule];
             edge._jobs = b.jobs;

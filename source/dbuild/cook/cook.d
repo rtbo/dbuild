@@ -115,7 +115,8 @@ class BuildPlan
 
     void addTarget(Node target)
     {
-        if (target.needsRebuild(cmdLog)) {
+        target.checkState(cmdLog);
+        if (target.needsRebuild) {
             targets ~= target;
             addEdgeToPlan(target.inEdge);
         }
@@ -158,7 +159,7 @@ class BuildPlan
                     o.postBuild(cmdLog, ec.deps);
 
                     foreach (e; o.outEdges.filter!(e => e.state == Edge.State.mustBuild)) {
-                        if (e.updateOnlyInputs.all!(i => !i.needsRebuild(cmdLog))) {
+                        if (e.updateOnlyInputs.all!(i => !i.needsRebuild)) {
                             addReady(e);
                             e.state = Edge.State.ready;
                         }
@@ -189,7 +190,8 @@ private:
         bool hasDepRebuild;
 
         foreach (n; edge.allInputs) {
-            if (n.needsRebuild(cmdLog) && n.inEdge.state == Edge.State.unknown) {
+            n.checkStateIfNeeded(cmdLog);
+            if (n.needsRebuild && n.inEdge.state == Edge.State.unknown) {
                 // edge not yet visited
                 addEdgeToPlan(n.inEdge);
                 hasDepRebuild = true;
