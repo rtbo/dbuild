@@ -4,8 +4,9 @@ void main(string[] args)
 {
     auto recipe = Recipe (
         [
-            Rule("cc", "gcc -MMD -MF- -c -o $out $cflags $in")
+            Rule("cc", "gcc -MMD -MF$out.d -c -o $out $cflags $in")
                 .withDeps(Deps.gcc)
+                .withDepfile("$out.d")
                 .withDescription("compiling $in"),
 
             Rule( "ar", "ar rcs $out $in")
