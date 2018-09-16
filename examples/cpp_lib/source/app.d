@@ -1,6 +1,6 @@
 import dbuild.cook;
 
-void main(string[] args)
+int main(string[] args)
 {
     auto recipe = Recipe (
         [
@@ -65,6 +65,14 @@ void main(string[] args)
         cleanRecipe(recipe);
     }
     else {
-        cookRecipe(recipe);
+        try {
+            cookRecipe(recipe);
+        }
+        catch (Exception ex) {
+            import std.stdio : stderr;
+            stderr.writeln("build failed:\n", ex.msg);
+            return 1;
+        }
     }
+    return 0;
 }
