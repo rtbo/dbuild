@@ -43,7 +43,7 @@ int main(string[] args)
             Build("shared_ld", [ "objs/source_PIC.o", "objs/c_source_PIC.o" ], "lib/liblib.so")
                 .withBinding("lflags", "-lstdc++"),
 
-            Build("exe_ld", [ "objs/source.o", "objs/c_source.o", "objs/main.o", "lib/lib.a" ], "bin/lib")
+            Build("exe_ld", [ "objs/main.o", "lib/lib.a" ], "bin/lib")
                 .withBinding("lflags", "-lstdc++ -lm"),
 
             Build("d_obj", [ "d/lib.d" ], "objs/d_lib.o"),
