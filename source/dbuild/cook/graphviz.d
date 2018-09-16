@@ -12,13 +12,33 @@ void writeGraphviz(string path, BuildGraph graph)
     f.writeln("digraph G {");
 
     foreach (k, n; graph.nodes) {
-        if (n.inEdge) {
-            foreach (i; n.inEdge.allInputs) {
-                f.writefln(`    "%s" -> "%s";`, n.path, i.path);
+
+        string shape = "";
+        if (!n.inEdge) {
+            shape = " [shape=box]";
+        }
+        else if (!n.outEdges.length) {
+            shape = " [shape=diamond]";
+        }
+
+        f.writefln(`    "%s"%s`, n.path, shape);
+    }
+
+    foreach (e; graph.edges) {
+        foreach (i; e.inputs) {
+            foreach (o; e.allOutputs) {
+                f.writefln(`    "%s" -> "%s"`, o.path, i.path);
             }
         }
-        else {
-            f.writefln(`    "%s";`, n.path);
+        foreach (i; e.implicitInputs) {
+            foreach (o; e.allOutputs) {
+                f.writefln(`    "%s" -> "%s" [style=dashed]`, o.path, i.path);
+            }
+        }
+        foreach (i; e.orderOnlyInputs) {
+            foreach (o; e.allOutputs) {
+                f.writefln(`    "%s" -> "%s" [style=dotted]`, o.path, i.path);
+            }
         }
     }
 
