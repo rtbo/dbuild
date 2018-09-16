@@ -227,6 +227,12 @@ class Edge
         }
     }
 
+    @property string depfile()
+    {
+        if (!_ruleTranslated) translateRule();
+        return rule.depfile;
+    }
+
     package @property void state(State state)
     {
         _state = state;

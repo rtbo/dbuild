@@ -55,6 +55,8 @@ void cleanRecipe(Recipe recipe)
     foreach (k, n; graph.nodes) {
         if (n.inEdge) {
             rm(n.path);
+            const df = n.inEdge.depfile;
+            if (df.length) rm(df);
         }
     }
 
