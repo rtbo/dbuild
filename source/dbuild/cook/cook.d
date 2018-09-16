@@ -18,7 +18,7 @@ void cookRecipe(Recipe recipe, string[] outputs=null, in uint maxJobs = totalCPU
     auto graph = new BuildGraph(recipe);
     auto plan = new BuildPlan(graph, recipe);
     scope(exit) {
-        plan.cmdLog.writeDown();
+        plan.close();
     }
 
     foreach (k, n; graph.nodes) {
@@ -41,26 +41,24 @@ void cleanRecipe(Recipe recipe)
 
     auto graph = new BuildGraph(recipe);
 
-    foreach (k, n; graph.nodes) {
-        if (n.inEdge && exists(n.path)) {
-            remove(n.path);
-            const dir = dirName(n.path);
+    void rm (in string path)
+    {
+        if (exists(path)) {
+            remove(path);
+            const dir = dirName(path);
             if (dirEntries(dir, SpanMode.shallow).empty) {
                 rmdir(dir);
             }
         }
     }
 
-    const cd = recipe.cacheDir;
-    const logpath = buildPath(recipe.cacheDir, ".cook_log");
-
-    if (exists(logpath)) {
-        remove(logpath);
+    foreach (k, n; graph.nodes) {
+        if (n.inEdge) {
+            rm(n.path);
+        }
     }
 
-    if (dirEntries(cd, SpanMode.shallow).empty) {
-        rmdir(cd);
-    }
+    rm (buildPath(recipe.cacheDir, cmdsLogFile));
 }
 
 /// Exception thrown when a build fails to complete
@@ -105,7 +103,12 @@ class BuildPlan
 
         this.graph = graph;
         this.recipe = recipe;
-        this.cmdLog = new CmdLog(buildPath(recipe.cacheDir, ".cook_log"));
+        this.cmdLog = new CmdLog(buildPath(recipe.cacheDir, cmdsLogFile));
+    }
+
+    void close()
+    {
+        cmdLog.close();
     }
 
     void addTarget(Node target)
