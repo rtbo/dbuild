@@ -1,9 +1,9 @@
 {
-	"name": "cpp_lib",
+	"name": "cook_example",
 	"authors": [
 		"Remi Thebault"
 	],
-	"description": "Dbuild example: building C++ library",
+	"description": "dbuild.cook example: building C++ library",
 	"copyright": "Copyright © 2018, Remi Thebault",
 	"license": "MIT",
 	"dependencies": {
