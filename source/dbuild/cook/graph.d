@@ -4,6 +4,7 @@ module dbuild.cook.graph;
 
 package:
 
+import dbuild.cook : escapeString;
 import dbuild.cook.log;
 import dbuild.cook.recipe;
 
@@ -313,9 +314,9 @@ private:
 
         switch (key) {
         case "in":
-            return inputs.map!(i => escapePath(i.path)).join(" ");
+            return inputs.map!(i => escapeString(i.path)).join(" ");
         case "out":
-            return outputs.map!(o => escapePath(o.path)).join(" ");
+            return outputs.map!(o => escapeString(o.path)).join(" ");
         default:
             auto p = key in _edgeBindings;
             if (p) return *p;
@@ -374,13 +375,6 @@ private:
     string[string] _graphBindings;
     string[string] _edgeBindings;
     bool _ruleTranslated;
-}
-
-private string escapePath (in string path)
-{
-    import std.array : replace;
-
-    return path.replace(` `, `\ `).replace(`"`, `\"`);
 }
 
 class BuildGraph

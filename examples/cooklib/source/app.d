@@ -4,7 +4,7 @@ int main(string[] args)
 {
     auto recipe = Recipe (
         [
-            Rule("cc", "gcc -MMD -MF$out.d -c -o $out $cflags $in")
+            Rule("cc", "clang -MMD -MF$out.d -c -o $out $cflags $in")
                 .withDeps(Deps.gcc)
                 .withDepfile("$out.d")
                 .withDescription("compiling $in"),
@@ -12,16 +12,16 @@ int main(string[] args)
             Rule( "ar", "ar rcs $out $in")
                 .withDescription("creating $out"),
 
-            Rule("shared_ld", "gcc -shared -o $out $lflags $in")
+            Rule("shared_ld", "clang -shared -o $out $lflags $in")
                 .withDescription("linking $out"),
 
-            Rule( "exe_ld", "gcc -o $out $lflags $in")
+            Rule( "exe_ld", "clang -o $out $lflags $in")
                 .withDescription("linking $out"),
 
-            Rule("d_obj", "dmd -c -of$out $dflags $in")
+            Rule("d_obj", "ldc2 -c -of$out $dflags $in")
                 .withDescription("compiling $in"),
 
-            Rule("d_exe", "dmd -of$out $lflags $in")
+            Rule("d_exe", "ldc2 -of$out $lflags $in")
                 .withDescription("linking $out"),
         ],
 

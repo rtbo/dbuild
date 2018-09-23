@@ -95,6 +95,14 @@ class BuildFailedException : Exception
     }
 }
 
+string escapeString (in string str)
+{
+    import std.array : replace;
+
+    return str.replace(`\`, `\\`).replace(` `, `\ `).replace(`"`, `\"`);
+}
+
+
 private:
 
 class BuildPlan
