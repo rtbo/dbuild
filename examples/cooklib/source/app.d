@@ -26,17 +26,17 @@ int main(string[] args)
         ],
 
         [
-            Build("cc", [ "c_cpp/source.cpp" ], "objs/source.o"),
+            Build("cc", [ "../src/c_cpp/source.cpp" ], "objs/source.o"),
 
-            Build("cc", [ "c_cpp/c_source.cpp" ], "objs/c_source.o"),
+            Build("cc", [ "../src/c_cpp/c_source.cpp" ], "objs/c_source.o"),
 
-            Build("cc", [ "c_cpp/source.cpp" ], "objs/source_PIC.o")
+            Build("cc", [ "../src/c_cpp/source.cpp" ], "objs/source_PIC.o")
                 .withBinding("cflags", "-fPIC"),
 
-            Build("cc", [ "c_cpp/c_source.cpp" ], "objs/c_source_PIC.o")
+            Build("cc", [ "../src/c_cpp/c_source.cpp" ], "objs/c_source_PIC.o")
                 .withBinding("cflags", "-fPIC"),
 
-            Build("cc", [ "c_cpp/main.cpp" ], "objs/main.o"),
+            Build("cc", [ "../src/c_cpp/main.cpp" ], "objs/main.o"),
 
             Build("ar", [ "objs/source.o", "objs/c_source.o" ], "lib/lib.a"),
 
@@ -46,10 +46,10 @@ int main(string[] args)
             Build("exe_ld", [ "objs/main.o", "lib/lib.a" ], "bin/lib")
                 .withBinding("lflags", "-lstdc++ -lm"),
 
-            Build("d_obj", [ "d/lib.d" ], "objs/d_lib.o"),
+            Build("d_obj", [ "../src/d/lib.d" ], "objs/d_lib.o"),
 
-            Build("d_obj", [ "d/app.d" ], "objs/d_app.o")
-                .withBinding("dflags", "-Id"),
+            Build("d_obj", [ "../src/d/app.d" ], "objs/d_app.o")
+                .withBinding("dflags", "-I../src/d"),
 
             Build("ar", [ "objs/d_lib.o" ], "lib/d_lib.a"),
 

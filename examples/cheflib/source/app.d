@@ -13,22 +13,22 @@ void main(string[] args)
 
     auto cpp = new CppGen();
     auto d = new DGen();
-    d.importPaths = [ "d" ];
+    d.importPaths = [ "../src/d" ];
 
-    lib.inputs = [ "c_cpp/source.cpp", "c_cpp/c_source.cpp" ];
+    lib.inputs = [ "../src/c_cpp/source.cpp", "../src/c_cpp/c_source.cpp" ];
     lib.generators = [ cpp ];
 
-    dylib.inputs = [ "c_cpp/source.cpp", "c_cpp/c_source.cpp" ];
+    dylib.inputs = [ "../src/c_cpp/source.cpp", "../src/c_cpp/c_source.cpp" ];
     dylib.generators = [ cpp ];
 
-    exe.inputs = [ "c_cpp/main.cpp" ];
+    exe.inputs = [ "../src/c_cpp/main.cpp" ];
     exe.generators = [ cpp ];
     exe.dependencies = ["lib"];
 
-    dLib.inputs = [ "d/lib.d" ];
+    dLib.inputs = [ "../src/d/lib.d" ];
     dLib.generators = [ d ];
 
-    dExe.inputs = [ "d/app.d" ];
+    dExe.inputs = [ "../src/d/app.d" ];
     dExe.generators = [ d ];
     dExe.dependencies = ["d_lib", "dylib"];
 
