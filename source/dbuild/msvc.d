@@ -33,7 +33,7 @@ string[] dubArchOptions()
 
     const dubArch = environment.get("DUB_ARCH");
     if (dubArch) {
-        if (dubArch == "x86" || "x86_mscoff") {
+        if (dubArch == "x86" || dubArch == "x86_mscoff") {
             return [ "x86" ];
         }
         if (dubArch == "x86_64") {
