@@ -28,6 +28,9 @@ class Project
 
     @property void products(Product[] products)
     {
+        foreach (p; products) {
+            p._project = this;
+        }
         _products = products;
     }
 }

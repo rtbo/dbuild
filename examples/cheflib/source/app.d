@@ -5,11 +5,11 @@ void main(string[] args)
 {
     auto proj = new Project("ChefExample");
 
-    auto lib = new StaticLibrary(proj, "lib");
-    auto dylib = new DynamicLibrary(proj, "dylib");
-    auto exe = new Executable(proj, "exe");
-    auto dLib = new StaticLibrary(proj, "d_lib");
-    auto dExe = new Executable(proj, "d_exe");
+    auto lib = new StaticLibrary("lib");
+    auto dylib = new DynamicLibrary("dylib");
+    auto exe = new Executable("exe");
+    auto dLib = new StaticLibrary("d_lib");
+    auto dExe = new Executable("d_exe");
 
     auto cpp = new CppGen();
     auto d = new DGen();

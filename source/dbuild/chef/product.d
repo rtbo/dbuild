@@ -22,7 +22,7 @@ struct InstallClause
 /// an artifact with some generators.
 class Product
 {
-    private Project _project;
+    package Project _project;
     private string _name;
     private string[] _inputs;
     private InstallClause[] _installClauses;
@@ -30,9 +30,8 @@ class Product
     private Generator[] _generators;
     private Generator[] _exportedGenerators;
 
-    this (Project project, in string name)
+    this (in string name)
     {
-        _project = project;
         _name = name;
     }
 
@@ -144,9 +143,9 @@ class NativeCode : Product
     private string _targetName;
     private Linkage _linkage;
 
-    this (Project project, in string name, in Linkage linkage)
+    this (in string name, in Linkage linkage)
     {
-        super(project, name);
+        super(name);
         _linkage = linkage;
         _targetName = name;
     }
@@ -192,24 +191,24 @@ class NativeCode : Product
 
 class Executable : NativeCode
 {
-    this (Project project, in string name)
+    this (in string name)
     {
-        super(project, name, Linkage.executable);
+        super(name, Linkage.executable);
     }
 }
 
 class DynamicLibrary : NativeCode
 {
-    this (Project project, in string name)
+    this (in string name)
     {
-        super(project, name, Linkage.dynamicLibrary);
+        super(name, Linkage.dynamicLibrary);
     }
 }
 
 class StaticLibrary : NativeCode
 {
-    this (Project project, in string name)
+    this (in string name)
     {
-        super(project, name, Linkage.staticLibrary);
+        super(name, Linkage.staticLibrary);
     }
 }
