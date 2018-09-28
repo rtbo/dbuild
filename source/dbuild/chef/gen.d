@@ -248,7 +248,7 @@ final class CppGen : NativeCodeGenerator
         import std.algorithm : endsWith, filter, map, sort, uniq;
         import std.array : array, join;
         import std.exception : enforce;
-        import std.path : buildPath;
+        import std.path : baseName, buildPath;
         import dbuild.cook : escapeString;
 
         auto prod = nativeCode(product);
@@ -292,7 +292,7 @@ final class CppGen : NativeCodeGenerator
 
         foreach (input; product.inputs.filter!(i => matches(i))) {
 
-            const obj = buildPath(buildDir, input~".o");
+            const obj = buildPath(buildDir, baseName(input)~".o");
             objects ~= obj;
 
             const lang = nameIsC(input) ? Language.c : Language.cpp;
@@ -505,7 +505,7 @@ class DGen : NativeCodeGenerator
         import std.algorithm : filter, map, sort, uniq;
         import std.array : array, join;
         import std.exception : enforce;
-        import std.path : buildPath;
+        import std.path : baseName, buildPath;
         import dbuild.cook : escapeString;
 
         auto prod = enforce(
@@ -543,7 +543,7 @@ class DGen : NativeCodeGenerator
 
         foreach (input; product.inputs.filter!(i => matches(i))) {
 
-            const obj = buildPath(buildDir, input~".o");
+            const obj = buildPath(buildDir, baseName(input)~".o");
             objects ~= obj;
 
             result ~= Build(objRn, [ input ], obj)
