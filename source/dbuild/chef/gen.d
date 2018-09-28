@@ -5,13 +5,24 @@ import dbuild.chef.product;
 import dbuild.cook.recipe;
 
 
-interface Generator
+abstract class Generator
 {
-    @property string name();
-    bool matches(in string name);
-    Rule[] issueCookRules(Chef chef, Product product);
-    Build[] issueCookBuilds(Chef chef, Product product);
-    string[] artifacts(Chef chef, Product product);
+    private string _name;
+
+    this (in string name)
+    {
+        _name = name;
+    }
+
+    final @property string name()
+    {
+        return _name;
+    }
+
+    abstract bool matches(in string name);
+    abstract Rule[] issueCookRules(Chef chef, Product product);
+    abstract Build[] issueCookBuilds(Chef chef, Product product);
+    abstract string[] artifacts(Chef chef, Product product);
 
     final Generator[] dependenciesExports(Product product, string[] collectedProds=null)
     {
@@ -43,20 +54,14 @@ interface Compiler
 
 abstract class NativeCodeGenerator : Generator
 {
-    private string _name;
     private Compiler _compiler;
     private bool _linker;
 
     this(string name, Compiler compiler, bool linker)
     {
-        _name = name;
+        super(name);
         _compiler = compiler;
         _linker = linker;
-    }
-
-    final override @property string name()
-    {
-        return _name;
     }
 
     final @property Compiler compiler()
