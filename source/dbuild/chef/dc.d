@@ -112,7 +112,7 @@ class DCompiler : Compiler
             objectRuleName(),
             format("%s -c -of$out $dflags $in", escapeString(path))
         )
-            .withDescription("Compiling $in");
+            .withDescription("Compiling $inName");
     }
 
     Rule linkRule(Linkage linkage)
@@ -127,13 +127,13 @@ class DCompiler : Compiler
         case Linkage.executable:
             return Rule(rn, format(
                 "%s -of$out $dlflags $in", escapeString(path)
-            )).withDescription("Linking $out");
+            )).withDescription("Linking $outName");
         case Linkage.dynamicLibrary:
             return Rule(rn, format(
                 "%s -shared -of$out $dlflags $in", escapeString(path)
-            )).withDescription("Linking $out");
+            )).withDescription("Linking $outName");
         case Linkage.staticLibrary:
-            return Rule(rn, "ar rcs $out $in").withDescription("Creating $out");
+            return Rule(rn, "ar rcs $out $in").withDescription("Creating $outName");
         }
     }
 }

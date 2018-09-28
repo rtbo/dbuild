@@ -311,12 +311,17 @@ private:
         import std.algorithm : map;
         import std.array : join;
         import std.exception : enforce;
+        import std.path : baseName;
 
         switch (key) {
         case "in":
             return inputs.map!(i => escapeString(i.path)).join(" ");
+        case "inName":
+            return inputs.map!(i => escapeString(i.path.baseName)).join(" ");
         case "out":
             return outputs.map!(o => escapeString(o.path)).join(" ");
+        case "outName":
+            return outputs.map!(o => escapeString(o.path.baseName)).join(" ");
         default:
             auto p = key in _edgeBindings;
             if (p) return *p;

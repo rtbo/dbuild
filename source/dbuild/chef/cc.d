@@ -115,7 +115,7 @@ class CCompiler : Compiler
         )
             .withDeps(Deps.gcc)
             .withDepfile("$out.deps")
-            .withDescription("Compiling $in");
+            .withDescription("Compiling $inName");
     }
 
     Rule linkRule(Language lang, Linkage linkage)
@@ -130,14 +130,14 @@ class CCompiler : Compiler
         case Linkage.executable:
             return Rule(rn, format(
                 "%s -o $out $lflags $in", program(lang)
-            )).withDescription("Linking $out");
+            )).withDescription("Linking $outName");
         case Linkage.dynamicLibrary:
             return Rule(rn, format(
                 "%s -shared -o $out $lflags $in", program(lang)
-            )).withDescription("Linking $out");
+            )).withDescription("Linking $outName");
         case Linkage.staticLibrary:
             return Rule(rn, "ar rcs $out $in")
-                    .withDescription("Creating $out");
+                    .withDescription("Creating $outName");
         }
     }
 
