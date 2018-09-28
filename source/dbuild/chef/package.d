@@ -89,6 +89,7 @@ class Chef
 
     Recipe buildRecipe()
     {
+        import std.algorithm : copy, sort, uniq;
         Rule[] rules;
         Build[] builds;
 
@@ -96,6 +97,9 @@ class Chef
             rules ~= prod.issueCookRules(this);
             builds ~= prod.issueCookBuilds(this);
         }
+
+        rules.sort!("a.name < b.name")();
+        rules.length -= rules.uniq().copy(rules).length;
 
         return Recipe(rules, builds);
     }
