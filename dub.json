@@ -8,5 +8,25 @@
 	"license": "MIT",
 	"dependencies": {
 		"derelict-lua": "~>2.0.0-beta.2"
-	}
+	},
+	"configurations": [
+		{
+			"name": "dbuild"
+		},
+		{
+			"name": "chef-app",
+			"targetType": "executable",
+			"versions": [ "ChefApp" ],
+			"targetName": "chef-build",
+			"targetPath": "bin"
+		},
+		{
+			"name": "cook-app",
+			"targetType": "executable",
+			"versions": [ "CookApp" ],
+			"targetName": "cook",
+			"sourcePaths": [ "source/dbuild/cook" ],
+			"targetPath": "bin"
+		}
+	]
 }
