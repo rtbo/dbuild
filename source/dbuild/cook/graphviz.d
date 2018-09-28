@@ -1,6 +1,15 @@
 module dbuild.cook.graphviz;
 
 import dbuild.cook.graph;
+import dbuild.cook.recipe;
+
+void writeRecipeGraphviz(string path, Recipe recipe)
+{
+    auto graph = new BuildGraph(recipe);
+    writeGraphviz(path, graph);
+}
+
+package:
 
 /// Serializes the graph into a file suitable for processing by graphviz' dot.
 void writeGraphviz(string path, BuildGraph graph)
