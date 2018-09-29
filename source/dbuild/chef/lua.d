@@ -33,9 +33,19 @@ class LuaInterface
         _L = null;
     }
 
-    Project runFile(in string filename)
+    Project runFile(in string filename, in string[string] bindings=null)
     {
+        import std.path : absolutePath, buildNormalizedPath, dirName, isAbsolute;
         import std.string : toStringz, fromStringz;
+
+        foreach (k, v; bindings) {
+            lua_pushlstring(_L, v.ptr, v.length);
+            lua_setglobal(_L, k.toStringz());
+        }
+
+        const scriptDir = buildNormalizedPath(dirName(filename));
+        lua_pushlstring(_L, scriptDir.ptr, scriptDir.length);
+        lua_setglobal(_L, "srcDir");
 
         if (luaL_loadfile(_L, toStringz(filename)) || lua_pcall(_L, 0, 0, 0)) {
             throw new Exception ("cannot run Lua file: " ~ fromStringz(lua_tostring(_L, -1)).idup);
@@ -80,6 +90,9 @@ class LuaInterface
 }
 
 private:
+
+import std.typecons : Flag, No, Yes;
+
 
 class LuaPrivException : Exception
 {
@@ -136,22 +149,43 @@ auto box (alias f, Args...)(lua_State* L, Args args) nothrow
     }
 }
 
-
-/// Get a string at index ind in the stack
-string getString(lua_State* L, int ind)
+string getSrcDir(lua_State* L)
 {
-    if (lua_isstring(L, ind)) {
-        size_t len;
-        const ptr = lua_tolstring(L, ind, &len);
-        return ptr[ 0 .. len ].idup;
+    lua_getglobal(L, "srcDir");
+    assert(lua_isstring(L, -1));
+    size_t len;
+    const ptr = lua_tolstring(L, -1, &len);
+    const res = ptr[0 .. len].idup;
+    lua_pop(L, 1);
+    return res;
+}
+
+/// Get a string or path at index ind in the stack.
+/// paths are further processed: appended to srcDir and normalized
+string getString(Flag!"isPath" isPath=No.isPath)(lua_State* L, int ind)
+{
+    import std.path : absolutePath, buildNormalizedPath, isAbsolute;
+
+    if (!lua_isstring(L, ind)) return null;
+
+    size_t len;
+    const ptr = lua_tolstring(L, ind, &len);
+    const p = ptr[ 0 .. len ].idup;
+    static if (isPath) {
+        if (!p.isAbsolute) {
+            return buildNormalizedPath(getSrcDir(L), p);
+        }
+        else {
+            return buildNormalizedPath(p);
+        }
     }
     else {
-        return null;
+        return p;
     }
 }
 
-/// Get a single string with key in table at ind
-string getStringAt(lua_State* L, int tableInd, string key, bool mustHave=true)
+/// Get a single string/path with key in table at ind
+string getStringAt(Flag!"isPath" isPath=No.isPath)(lua_State* L, int tableInd, string key, bool mustHave=true)
 in (tableInd > 0)
 {
     import std.format : format;
@@ -163,36 +197,36 @@ in (tableInd > 0)
         luaType == LUA_TSTRING,
         format("was expecting string for key \"%s\"", key)
     );
-    return getString(L, -1);
+    return getString!isPath(L, -1);
 }
 
-/// Get a list (sub-table) of strings at index key of a table at index tableInd
+/// Get a list (sub-table) of strings/paths at index key of a table at index tableInd
 /// in the stack. If a single string is to be retrieved, it can be stored
 /// directly as a string value instead of a table containing one string.
 /// If the key is not defined, return null.
 /// If is also allowed that the list of string is returned by an inline function
-string[] getStringListAt(lua_State* L, int tableInd, string key)
+string[] getStringListAt(Flag!"isPath" isPath=No.isPath)(lua_State* L, int tableInd, string key)
 in (tableInd > 0)
 {
     lua_pushlstring(L, key.ptr, key.length);
-    return getStringListFromTop(L, lua_gettable(L, tableInd), true);
+    return getStringListFromTop!isPath(L, lua_gettable(L, tableInd), true);
 }
 
-/// Retrieve a list of string from top of Lua stack.
+/// Retrieve a list of string/path from top of Lua stack.
 /// It can be a single string, an array of strings, nil (null is returned),
 /// or (if allowFunc is true) a function evaluating to a single or array of strings.
-string[] getStringListFromTop(lua_State* L, int typeAtTop, bool allowFunc=true)
+string[] getStringListFromTop(Flag!"isPath" isPath=No.isPath)(lua_State* L, int typeAtTop, bool allowFunc=true)
 {
     switch (typeAtTop) {
     case LUA_TSTRING:
-        return [ getString(L, -1) ];
+        return [ getString!isPath(L, -1) ];
     case LUA_TTABLE:
         // top is a table containing (in principle) strings
         const tlen = luaL_len(L, -1);
         string[] res = new string[tlen];
         foreach (i; 0 .. tlen) {
             lua_rawgeti(L, -1, cast(int)(i+1));
-            res[i] = getString(L, -1);
+            res[i] = getString!isPath(L, -1);
             lua_pop(L, 1);
         }
         return res;
@@ -201,7 +235,7 @@ string[] getStringListFromTop(lua_State* L, int typeAtTop, bool allowFunc=true)
             throw new LuaPrivException("function not allowed");
         }
         lua_call(L, 0, 1);
-        return getStringListFromTop(L, lua_type(L, -1), false);
+        return getStringListFromTop!isPath(L, lua_type(L, -1), false);
     case LUA_TNIL:
         return null;
     default:
@@ -298,7 +332,6 @@ T extractObject(T)(lua_State* L, int ind, const(char)*metatype)
     return cast(T)loc;
 }
 
-
 int buildProduct(T : Product)(lua_State* L) nothrow
 {
     return box!({
@@ -308,7 +341,7 @@ int buildProduct(T : Product)(lua_State* L) nothrow
         );
         const name = getStringAt(L, 1, "name");
         auto prod = new T(name);
-        prod.inputs = getStringListAt(L, 1, "source");
+        prod.inputs = getStringListAt!(Yes.isPath)(L, 1, "source");
         prod.dependencies = getStringListAt(L, 1, "dependencies");
         prod.generators = getObjects!Generator(L, 1, "generators", "chef.Generator");
 
@@ -330,7 +363,7 @@ int dbuild_lua_CppGen(lua_State* L)
         auto gen = new CppGen;
         if (lua_gettop(L) && lua_istable(L, 1)) {
             gen.defines = getDefinesTable(L, 1, "defines");
-            gen.includePaths = getStringListAt(L, 1, "includePaths");
+            gen.includePaths = getStringListAt!(Yes.isPath)(L, 1, "includePaths");
             gen.cflags = getStringListAt(L, 1, "cflags");
             gen.lflags = getStringListAt(L, 1, "lflags");
         }
@@ -348,7 +381,7 @@ int dbuild_lua_DGen(lua_State* L)
         if (lua_gettop(L) && lua_istable(L, 1)) {
             gen.versionIdents = getStringListAt(L, 1, "versionIdents");
             gen.debugIdents = getStringListAt(L, 1, "debugIdents");
-            gen.importPaths = getStringListAt(L, 1, "importPaths");
+            gen.importPaths = getStringListAt!(Yes.isPath)(L, 1, "importPaths");
             gen.dflags = getStringListAt(L, 1, "dflags");
             gen.lflags = getStringListAt(L, 1, "lflags");
         }
