@@ -393,3 +393,36 @@ private string[2] readBinding(string str, string filename, int lineNum)
     );
     return [ split[0].strip(), split[2].strip() ];
 }
+
+/// Transform all paths in the recipe so that they are relative to the
+/// given new base. The paths that are already relative are considered relative
+/// to curBase.
+void rebasePaths(ref Recipe recipe, in string curBase, in string newBase)
+in {
+    import std.path : isAbsolute;
+    assert(isAbsolute(newBase) && isAbsolute(curBase));
+}
+body {
+    import std.path : absolutePath, buildNormalizedPath, isAbsolute, relativePath;
+
+    void processPath(ref string path) {
+        path = buildNormalizedPath(absolutePath(path, curBase).relativePath(newBase));
+    }
+    void processPaths(ref string[] paths) {
+        foreach (ref p; paths) {
+            processPath(p);
+        }
+    }
+
+    foreach (ref b; recipe.builds) {
+        processPaths(b._inputs);
+        processPaths(b._implicitInputs);
+        processPaths(b._orderOnlyInputs);
+        processPaths(b._outputs);
+        processPaths(b._implicitOutputs);
+    }
+
+    if (!recipe.cacheDir.isAbsolute) {
+        processPath(recipe._cacheDir);
+    }
+}
