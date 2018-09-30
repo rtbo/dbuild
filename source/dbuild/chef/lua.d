@@ -33,7 +33,14 @@ class LuaInterface
         _L = null;
     }
 
-    Project runFile(in string filename, in string[string] bindings=null)
+    /// Run the Lua file pointed to by filename.
+    /// Params:
+    ///     - filename  = the Lua file path
+    ///     - srcDir    = the path to the source directory, relative from the build directory.
+    ///                   All paths pointing in the source directory will use this as basis in
+    ///                   final recipe.
+    ///     - bindings  = Additional bindings accessible as global variables in the script.
+    Project runFile(in string filename, in string srcDir, in string[string] bindings=null)
     {
         import std.path : absolutePath, buildNormalizedPath, dirName, isAbsolute;
         import std.string : toStringz, fromStringz;
@@ -43,8 +50,7 @@ class LuaInterface
             lua_setglobal(_L, k.toStringz());
         }
 
-        const scriptDir = buildNormalizedPath(dirName(filename));
-        lua_pushlstring(_L, scriptDir.ptr, scriptDir.length);
+        lua_pushlstring(_L, srcDir.ptr, srcDir.length);
         lua_setglobal(_L, "srcDir");
 
         if (luaL_loadfile(_L, toStringz(filename)) || lua_pcall(_L, 0, 0, 0)) {

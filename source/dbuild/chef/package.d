@@ -101,6 +101,6 @@ class Chef
         rules.sort!("a.name < b.name")();
         rules.length -= rules.uniq().copy(rules).length;
 
-        return Recipe(rules, builds).withCacheDir(buildDir);
+        return Recipe(rules, builds);
     }
 }

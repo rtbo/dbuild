@@ -248,7 +248,7 @@ final class CppGen : NativeCodeGenerator
         import std.algorithm : endsWith, filter, map, sort, uniq;
         import std.array : array, join;
         import std.exception : enforce;
-        import std.path : baseName, buildNormalizedPath, buildPath;
+        import std.path : baseName, buildPath;
         import dbuild.cook : escapeString;
 
         auto prod = nativeCode(product);
@@ -287,7 +287,7 @@ final class CppGen : NativeCodeGenerator
         Build[] result;
         string[] objects;
 
-        const buildDir = chef.buildDir.buildNormalizedPath(product.name);
+        const buildDir = product.name;
         bool hasCpp;
 
         foreach (input; product.inputs.filter!(i => matches(i))) {
@@ -505,7 +505,7 @@ class DGen : NativeCodeGenerator
         import std.algorithm : filter, map, sort, uniq;
         import std.array : array, join;
         import std.exception : enforce;
-        import std.path : baseName, buildNormalizedPath, buildPath;
+        import std.path : baseName, buildPath;
         import dbuild.cook : escapeString;
 
         auto prod = enforce(
@@ -538,7 +538,7 @@ class DGen : NativeCodeGenerator
         Build[] result;
         string[] objects;
 
-        const buildDir = chef.buildDir.buildNormalizedPath(product.name);
+        const buildDir = product.name;
         const objRn = dcompiler.objectRuleName();
 
         foreach (input; product.inputs.filter!(i => matches(i))) {

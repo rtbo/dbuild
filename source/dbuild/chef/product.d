@@ -62,6 +62,9 @@ class Product
         }
         return rules;
     }
+
+    /// Issue the recipe builds. One requirement is that all generated files
+    /// (object, codegen, artifacts...) must have path relative to the build directory.
     Build[] issueCookBuilds(Chef chef)
     {
         Build[] builds;
@@ -185,7 +188,7 @@ class NativeCode : Product
     {
         import std.path : buildPath;
 
-        return buildPath(chef.buildDir, name, artifactName);
+        return buildPath(name, artifactName);
     }
 }
 

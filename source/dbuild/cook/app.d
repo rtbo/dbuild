@@ -48,16 +48,15 @@ Options:`, args.length ? args[0] : "cook"
 
     try {
         import dbuild.cook : cookRecipe;
-        import dbuild.cook.recipe : loadFromFile, rebasePaths;
-        import std.path : absolutePath, dirName;
+        import dbuild.cook.recipe : loadFromFile;
+        import std.file : chdir;
+        import std.path : dirName;
 
         auto recipe = loadFromFile(recipeFile);
 
-        const curBase = buildNormalizedPath(absolutePath(dirName(recipeFile)));
-        const newBase = buildNormalizedPath(getcwd());
-        if (curBase != newBase) {
-            recipe.rebasePaths(curBase, newBase);
-        }
+        const cwd = getcwd();
+        chdir(dirName(recipeFile));
+        scope(exit) chdir(cwd);
 
         cookRecipe(recipe);
 
