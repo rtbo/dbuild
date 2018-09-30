@@ -400,10 +400,13 @@ private string[2] readBinding(string str, string filename, int lineNum)
 void rebasePaths(ref Recipe recipe, in string curBase, in string newBase)
 in {
     import std.path : isAbsolute;
-    assert(isAbsolute(newBase) && isAbsolute(curBase));
+    assert (
+        isAbsolute(curBase) && isAbsolute(newBase),
+        "curBase and newBase must be absolute paths"
+    );
 }
 body {
-    import std.path : absolutePath, buildNormalizedPath, isAbsolute, relativePath;
+    import std.path : absolutePath, buildNormalizedPath, relativePath;
 
     void processPath(ref string path) {
         path = buildNormalizedPath(absolutePath(path, curBase).relativePath(newBase));
@@ -422,7 +425,7 @@ body {
         processPaths(b._implicitOutputs);
     }
 
-    if (!recipe.cacheDir.isAbsolute) {
+    if (recipe._cacheDir) {
         processPath(recipe._cacheDir);
     }
 }

@@ -30,6 +30,11 @@ Options:`, args.length ? args[0] : "chef-build"
         "cook|c", "Perform cook directly after generation (and do not write recipe)", &cook,
     );
 
+    if (opts.helpWanted) {
+        defaultGetoptPrinter(intro~usageIntro, opts.options);
+        return 0;
+    }
+
     int error(string msg)
     {
         import std.stdio : stderr;
@@ -40,11 +45,6 @@ Options:`, args.length ? args[0] : "chef-build"
 
         stderr.write(output.data);
         return 1;
-    }
-
-    if (opts.helpWanted) {
-        defaultGetoptPrinter(intro~usageIntro, opts.options);
-        return 0;
     }
 
     if (!luaFile) {
@@ -88,7 +88,7 @@ Options:`, args.length ? args[0] : "chef-build"
 
             const curBase = buildNormalizedPath(getcwd());
             const newBase = buildNormalizedPath(absolutePath(buildFolder));
-            if (curBase == newBase) {
+            if (curBase != newBase) {
                 recipe.rebasePaths(curBase, newBase);
             }
             writeToFile(recipe, buildPath(buildFolder, "cook.recipe"));
@@ -99,6 +99,6 @@ Options:`, args.length ? args[0] : "chef-build"
     catch (Exception ex) {
         import std.stdio : stderr;
         stderr.writefln("Error occured: %s\n", ex.msg);
-        return 1;
+        return 2;
     }
 }
