@@ -29,15 +29,18 @@ MsvcInstall[] detectMsvcInstalls()
 /// Returns: the guessed options, or null if the right options could not be guessed.
 string[] dubArchOptions()
 {
+    import std.algorithm : canFind;
     import std.process : environment;
 
     const dubArch = environment.get("DUB_ARCH");
     if (dubArch) {
-        if (dubArch == "x86" || dubArch == "x86_mscoff") {
-            return [ "x86" ];
-        }
-        if (dubArch == "x86_64") {
+        // some times can be "x86 x86_mscoff"
+        if (dubArch.canFind("x86_64")) {
             return [ "amd64" ];
+        }
+        else if (dubArch.canFind("x86")) {
+            // includes x86_mscoff
+            return [ "x86" ];
         }
     }
     return null;
