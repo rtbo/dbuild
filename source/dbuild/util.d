@@ -90,7 +90,7 @@ auto lockFile(string path, Duration timeout=dur!"msecs"(500))
     }
 }
 
-void runCommand(string[] command, string workDir = null, bool quiet = false, string[string] env = null)
+void runCommand(in string[] command, string workDir = null, bool quiet = false, string[string] env = null)
 {
     runCommands((&command)[0 .. 1], workDir, quiet, env);
 }
@@ -153,6 +153,26 @@ string searchInEnvPath(in string envPath, in string filename, in char sep=envPat
     return null;
 }
 
+/// Search for filename pattern in the envPath variable content which can
+/// contain multiple paths separated with sep depending on platform.
+/// Returns: array of matching file names
+string[] searchPatternInEnvPath(in string envPath, in string pattern, in char sep=envPathSep)
+{
+    import std.algorithm : map, splitter;
+    import std.array : array;
+    import std.file : dirEntries, exists, isDir, SpanMode;
+
+    string[] res = [];
+
+    foreach (dir; splitter(envPath, sep)) {
+        if (!exists(dir) || !isDir(dir)) continue;
+        res ~= dirEntries(dir, pattern, SpanMode.shallow)
+            .map!(de => de.name)
+            .array;
+    }
+    return res;
+}
+
 string searchExecutable(in string exe)
 {
     import std.process : environment;
@@ -184,4 +204,29 @@ string tempFilePath(string fnFmt)
     // random id with 20 letters
     const id = letters.byCodeUnit.randomSample(20).to!string;
     return tempDir.buildPath(format(fnFmt, id));
+}
+
+/// Install file to target.
+/// target's directory is recursively created if does not exist.
+/// if a target exists and is newer or have same date than file, install is not performed
+void installCopy(in string file, in string target)
+{
+    import std.exception : enforce;
+    import std.path : dirName;
+    import std.file : copy, exists, mkdirRecurse, isDir, timeLastModified;
+
+    enforce(exists(file), "attempt to install non-existing file");
+
+    const directory = dirName(target);
+
+    if (exists(target) && timeLastModified(target) >= timeLastModified(file)) {
+        return;
+    }
+    enforce(
+        !exists(directory) || isDir(directory),
+        directory ~ " exists but is not a directory"
+    );
+
+    mkdirRecurse(directory);
+    copy(file, target);
 }
