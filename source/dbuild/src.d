@@ -7,6 +7,7 @@ interface Source
 {
     /// Feeds the digest in a way that makes a unique build identifier.
     void feedBuildId(ref MD5 digest);
+
     /// Obtain the source code.
     /// Implementation for local directories will simply return the local source dir,
     /// without consideration of the workDir.
@@ -17,6 +18,15 @@ interface Source
     ///               and extract the source code.
     /// Returns: the path to the src root directory.
     string obtain(in string workDir);
+
+    /// Add patches to the source code.
+    /// Patches are patch content, not patch filenames.
+    /// Patches are applied with Git which must be found in PATH
+    /// (even if source code is not a Git repo)
+    final Source withPatch(in string[] patches)
+    {
+        return new PatchedSource(this, patches);
+    }
 }
 
 /// Returns a Source pointing to a local existing directory
@@ -82,6 +92,20 @@ private string srcLockPath(in string workDir)
     import std.path : buildPath;
 
     return buildPath(workDir, ".srcLock");
+}
+
+private string patchLockPath(in string workDir, in string patch)
+{
+    import dbuild.util : feedDigestData;
+    import std.digest : toHexString, LetterCase;
+    import std.digest.md : MD5;
+    import std.path : buildPath;
+
+    MD5 md5;
+    feedDigestData(md5, patch);
+    const binHash = md5.finish();
+    const hash = toHexString!(LetterCase.lower)(binHash)[0 .. 7].idup;
+    return buildPath(workDir, "."~hash~".patchLock");
 }
 
 private class ArchiveFetchSource : Source
@@ -322,6 +346,57 @@ private class GitSource : Source
     }
 }
 
+private class PatchedSource : Source
+{
+    const(string)[] patches;
+    Source impl;
+
+    this(Source impl, in string[] patches)
+    {
+        import dbuild.util : searchExecutable;
+        import std.exception : enforce;
+
+        enforce(searchExecutable("git"), "could not find git in PATH! Git is needed to apply patche");
+        this.impl = impl;
+        this.patches = patches;
+    }
+
+    void feedBuildId(ref MD5 digest)
+    {
+        import dbuild.util : feedDigestData;
+
+        impl.feedBuildId(digest);
+        feedDigestData(digest, patches);
+    }
+
+    string obtain(in string workDir)
+    {
+        import dbuild.util : lockFile;
+        import std.process : Config, pipeProcess, Redirect, wait;
+        import std.stdio : writefln;
+        import std.file : exists;
+
+        const dir = impl.obtain(workDir);
+
+        writefln("Patching %s", dir);
+
+        foreach (patch; patches) {
+            const lockPath = patchLockPath(workDir, patch);
+            if (exists(lockPath)) {
+                continue;
+            }
+            const args = ["git", "apply", "-"];
+            auto pipes = pipeProcess(args, Redirect.stderr|Redirect.stdin, null, Config.none, dir);
+            pipes.stdin.write(patch);
+            pipes.stdin.flush();
+            pipes.stdin.close();
+            wait(pipes.pid);
+            auto lock = lockFile(lockPath);
+        }
+
+        return dir;
+    }
+}
 
 private enum ArchiveFormat
 {
