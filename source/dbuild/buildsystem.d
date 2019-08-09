@@ -38,6 +38,14 @@ struct CMake
         return cmake;
     }
 
+    CMake withEnv(in string[string] env)
+    {
+        foreach(k, v; env) {
+            _env[k] = v;
+        }
+        return this;
+    }
+
     version(Windows)
     CMake withMsvcSetup(int minVer=0, string[] vcvarsOptions=null)
     {
@@ -59,7 +67,11 @@ struct CMake
         if (!installs.length || installs[0].ver[0] < minVer) {
             return false;
         }
+        auto oldEnv = _env;
         _env = msvcEnvironment(installs[0].vcvarsBat, vcvarsOptions);
+        foreach(k, v; oldEnv) {
+            _env[k] = v;
+        }
         _additionalHashFeed = installs[0].vcvarsBat ~ vcvarsOptions;
         _msvc = true;
 
