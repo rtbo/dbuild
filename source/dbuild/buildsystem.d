@@ -35,6 +35,9 @@ struct CMake
         CMake cmake;
         cmake._gen = generator;
         cmake._options = options;
+        if (generator == "Ninja") {
+            cmake._env["NINJA_STATUS"] = "[%r %f/%t %p %o/s] ";
+        }
         return cmake;
     }
 
