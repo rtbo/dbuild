@@ -148,6 +148,7 @@ struct Build
         import dbuild.util : lockFile;
         import std.exception : enforce;
         import std.file : mkdirRecurse;
+        import std.stdio : writeln;
 
         checkPrerequisites();
         ensureWorkDir();
@@ -167,6 +168,9 @@ struct Build
         if (!checkTargets(dirs)) {
             auto lock = lockFile(bldLockPath(buildId));
             buildSystem.issueCmds(BuildContext(dirs, _type, _quiet));
+        }
+        else {
+            writeln("targets are up-to-date");
         }
 
         return BuildResult(dirs, _targets);
